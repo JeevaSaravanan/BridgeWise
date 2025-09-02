@@ -1058,14 +1058,20 @@ async def analyze_repository(request: RepositoryAnalysisRequest):
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+    """Health check endpoint with DB status."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "database": "ready" if db_manager.is_ready() else "unavailable"
+    }
 
 # Portfolio Management Endpoints
 
 @app.get("/api/portfolio", response_model=List[PortfolioItem])
 async def get_portfolio_items():
     """Get all portfolio items"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         items = await db_manager.get_all_portfolio_items()
         return items
@@ -1075,6 +1081,8 @@ async def get_portfolio_items():
 @app.post("/api/portfolio", response_model=PortfolioItem)
 async def create_portfolio_item(item: PortfolioItemCreate):
     """Create a new portfolio item"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         new_item = await db_manager.create_portfolio_item(item.dict())
         return new_item
@@ -1084,18 +1092,15 @@ async def create_portfolio_item(item: PortfolioItemCreate):
 @app.put("/api/portfolio/{item_id}", response_model=PortfolioItem)
 async def update_portfolio_item(item_id: str, updates: PortfolioItemUpdate):
     """Update an existing portfolio item"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
-        # Filter out None values
         update_data = {k: v for k, v in updates.dict().items() if v is not None}
-        
         if not update_data:
             raise HTTPException(status_code=400, detail="No valid updates provided")
-            
         updated_item = await db_manager.update_portfolio_item(item_id, update_data)
-        
         if not updated_item:
             raise HTTPException(status_code=404, detail="Portfolio item not found")
-            
         return updated_item
     except HTTPException:
         raise
@@ -1105,12 +1110,12 @@ async def update_portfolio_item(item_id: str, updates: PortfolioItemUpdate):
 @app.delete("/api/portfolio/{item_id}")
 async def delete_portfolio_item(item_id: str):
     """Delete a portfolio item"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         success = await db_manager.delete_portfolio_item(item_id)
-        
         if not success:
             raise HTTPException(status_code=404, detail="Portfolio item not found")
-            
         return {"message": "Portfolio item deleted successfully"}
     except HTTPException:
         raise
@@ -1120,6 +1125,8 @@ async def delete_portfolio_item(item_id: str):
 @app.get("/api/portfolio/stats", response_model=PortfolioStats)
 async def get_portfolio_stats():
     """Get portfolio statistics"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         stats = await db_manager.get_portfolio_stats()
         return stats
@@ -1129,10 +1136,11 @@ async def get_portfolio_stats():
 @app.get("/api/portfolio/search", response_model=List[PortfolioItem])
 async def search_portfolio_items(q: str):
     """Search portfolio items by query"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         if not q.strip():
             return []
-            
         items = await db_manager.search_portfolio_items(q)
         return items
     except Exception as e:
@@ -1141,15 +1149,14 @@ async def search_portfolio_items(q: str):
 @app.post("/api/portfolio/import")
 async def import_portfolio_data(data: PortfolioImportData):
     """Import portfolio data from JSON"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         created_items = []
-        
         for item_data in data.items:
-            # Remove id and timestamps to avoid conflicts
             clean_data = {k: v for k, v in item_data.items() if k not in ['id', 'createdAt', 'updatedAt']}
             new_item = await db_manager.create_portfolio_item(clean_data)
             created_items.append(new_item)
-            
         return {
             "message": f"Successfully imported {len(created_items)} portfolio items",
             "imported_items": len(created_items)
@@ -1160,6 +1167,8 @@ async def import_portfolio_data(data: PortfolioImportData):
 @app.post("/api/portfolio/seed")
 async def seed_sample_portfolio_data():
     """Seed the database with sample portfolio data"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         sample_items = [
             {
@@ -1186,12 +1195,10 @@ async def seed_sample_portfolio_data():
                 "thumbnail": "🤖"
             }
         ]
-        
         created_items = []
         for item_data in sample_items:
             new_item = await db_manager.create_portfolio_item(item_data)
             created_items.append(new_item)
-            
         return {
             "message": f"Successfully seeded {len(created_items)} sample portfolio items",
             "items": created_items
@@ -1202,37 +1209,24 @@ async def seed_sample_portfolio_data():
 @app.post("/api/portfolio/migrate-skills")
 async def migrate_portfolio_skills():
     """Migrate portfolio items to populate skills from analysisResult.extracted_skills"""
+    if not db_manager.is_ready():
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
-        # Get all portfolio items
         items = await db_manager.get_all_portfolio_items()
         updated_count = 0
-        
         for item in items:
-            print(f"Processing item: {item['title']}")
-            print(f"Current skills: {item.get('skills', [])}")
-            print(f"Has analysis_result: {bool(item.get('analysis_result'))}")
-            
             if item.get('analysis_result'):
                 analysis_result = item['analysis_result']
                 extracted_skills = analysis_result.get('extracted_skills', [])
-                print(f"Extracted skills: {extracted_skills}")
-                
                 current_skills = item.get('skills', [])
                 if len(extracted_skills) > len(current_skills):
-                    print(f"Migrating skills for {item['title']}")
-                    # Use extracted skills as the new skills
-                    await db_manager.update_portfolio_item(item['id'], {
-                        'skills': extracted_skills
-                    })
+                    await db_manager.update_portfolio_item(item['id'], {'skills': extracted_skills})
                     updated_count += 1
-                    print(f"✅ Updated portfolio item '{item['title']}' with {len(extracted_skills)} skills")
-        
         return {
             "message": f"Successfully migrated {updated_count} portfolio items",
             "updated_count": updated_count
         }
     except Exception as e:
-        print(f"Migration error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to migrate portfolio skills: {str(e)}")
 
 if __name__ == "__main__":

@@ -70,18 +70,27 @@ def load_graph(records: List[Dict[str, Any]]):
             description: str = rec.get("description") or ""
             skills: List[str] = rec.get("skills", [])
             role_skills: List[Dict[str, Any]] = rec.get("role_skills", [])
-            # Upsert person
+            linkedin_job_title: str = rec.get("linkedinJobTitle") or ""
+            # If linkedinJobTitle is missing, try to get from first role
+            if not linkedin_job_title and role_skills:
+                first_role = role_skills[0]
+                linkedin_job_title = first_role.get("title", "")
+            # Upsert person with skills and linkedinJobTitle properties
             session.execute_write(
-                lambda tx, pid, nm, desc: tx.run(
+                lambda tx, pid, nm, desc, skl, job: tx.run(
                     "MERGE (p:Person {id:$pid}) "
-                    "SET p.name=$nm, p.description=$desc",
+                    "SET p.name=$nm, p.description=$desc, p.skills=$skl, p.linkedinJobTitle=$job",
                     pid=pid,
                     nm=nm,
                     desc=desc,
+                    skl=skills,
+                    job=linkedin_job_title,
                 ),
                 person_id,
                 name,
                 description,
+                skills,
+                linkedin_job_title,
             )
             # Upsert skills and relationships
             for skill in skills:

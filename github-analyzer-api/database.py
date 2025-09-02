@@ -1,5 +1,6 @@
 import asyncpg
 import os
+import asyncio
 from dotenv import load_dotenv
 from typing import List, Dict, Optional
 import json
@@ -12,63 +13,74 @@ load_dotenv()
 class DatabaseManager:
     def __init__(self):
         # Use DATABASE_URL if provided, otherwise construct from individual components
+        db_host = os.getenv('DB_HOST')
+        db_name = os.getenv('DB_NAME')
+        db_user = os.getenv('DB_USER')
+        db_password = os.getenv('DB_PASSWORD')
         database_url = os.getenv('DATABASE_URL')
-        if database_url:
+
+        if db_host and db_name and db_user and db_password:
+            self.connection_string = (
+                f"postgresql://{db_user}:{db_password}@{db_host}:{os.getenv('DB_PORT', '5432')}/{db_name}"
+            )
+        elif database_url:
             self.connection_string = database_url
         else:
-            self.connection_string = (
-                f"postgresql://{os.getenv('DB_USER')}:"
-                f"{os.getenv('DB_PASSWORD')}@"
-                f"{os.getenv('DB_HOST')}:"
-                f"{os.getenv('DB_PORT', '5432')}/"
-                f"{os.getenv('DB_NAME')}"
-            )
+            self.connection_string = "postgresql://postgres:postgres@localhost:5432/postgres"
         self.pool = None
 
     async def initialize(self):
         """Initialize database connection pool"""
-        try:
-            print(f"🔄 Attempting to connect to: {self.connection_string.split('@')[1] if '@' in self.connection_string else 'database'}")
-            
-            self.pool = await asyncpg.create_pool(
-                self.connection_string,
-                min_size=1,
-                max_size=10,
-                command_timeout=60,  # 60 seconds command timeout
-                server_settings={
-                    'application_name': 'bridgewise_app',
-                    'jit': 'off'
-                }
-            )
-            print("✅ Database connection pool initialized")
-            
-            # Test the connection
-            async with self.pool.acquire() as conn:
-                result = await conn.fetchval("SELECT 1")
-                print(f"✅ Database connection test successful: {result}")
-                
-        except Exception as e:
-            error_msg = str(e).lower()
-            print(f"❌ Failed to initialize database: {e}")
-            
-            if "does not exist" in error_msg:
-                print("💡 Database does not exist - please create the 'bridgewise_db' database first")
-            elif "authentication" in error_msg or "password" in error_msg:
-                print("💡 Authentication failed - please check your username and password")
-            elif "connection" in error_msg and ("refused" in error_msg or "timeout" in error_msg):
-                print("💡 Connection failed - please check:")
-                print("   - AWS RDS instance is running")
-                print("   - Security groups allow port 5432 from your IP")
-                print("   - VPC settings allow public access")
-                print("   - Your network allows outbound connections to AWS")
-            
-            print(f"💡 Connection details: postgresql://***:***@{self.connection_string.split('@')[1] if '@' in self.connection_string else 'unknown'}")
-            raise
+        attempts = int(os.getenv('DB_CONNECT_RETRIES', '5'))
+        initial_delay = float(os.getenv('DB_CONNECT_INITIAL_DELAY', '1'))
+        max_delay = float(os.getenv('DB_CONNECT_MAX_DELAY', '15'))
+        delay = initial_delay
+        target = self.connection_string.split('@')[1] if '@' in self.connection_string else self.connection_string
+        print(f"🔄 Attempting DB connect: {target} (max {attempts} attempts)")
+        last_error = None
+        for attempt in range(1, attempts + 1):
+            try:
+                self.pool = await asyncpg.create_pool(
+                    self.connection_string,
+                    min_size=1,
+                    max_size=10,
+                    command_timeout=60,
+                    server_settings={'application_name': 'bridgewise_app', 'jit': 'off'}
+                )
+                print("✅ DB pool initialized")
+                async with self.pool.acquire() as conn:
+                    result = await conn.fetchval("SELECT 1")
+                print(f"✅ DB test query returned: {result}")
+                return
+            except Exception as e:
+                last_error = e
+                msg = str(e).lower()
+                print(f"❌ DB connection attempt {attempt}/{attempts} failed: {e}")
+                if attempt == 1:
+                    if "does not exist" in msg:
+                        print("💡 Database missing - create it (CREATE DATABASE ...)")
+                    elif any(k in msg for k in ["auth", "password"]):
+                        print("💡 Auth issue - verify DB_USER / DB_PASSWORD")
+                    elif any(k in msg for k in ["refused", "timeout", "unreachable", "could not connect"]):
+                        print("💡 Network issue - verify host/port, security groups, firewall, server status")
+                if attempt < attempts:
+                    print(f"⏳ Retrying in {delay:.1f}s...")
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, max_delay)
+        print("💥 All DB connection attempts failed. Proceeding without database (read-only AI features still available).")
+        print(f"💡 Last error: {last_error}")
+        print(f"💡 Connection details (masked): postgresql://***:***@{target}")
+        self.pool = None  # Degraded mode
+        return
 
     async def close(self):
         """Close database connection pool"""
         if self.pool:
             await self.pool.close()
+            print("🔌 DB pool closed")
+
+    def is_ready(self) -> bool:
+        return self.pool is not None
 
     async def get_all_portfolio_items(self) -> List[Dict]:
         """Get all portfolio items"""
@@ -110,6 +122,42 @@ class DatabaseManager:
     async def create_portfolio_item(self, item_data: Dict) -> Dict:
         """Create a new portfolio item"""
         async with self.pool.acquire() as conn:
+            # Optional lightweight deduplication (guards against immediate double POSTs from dev tools / React StrictMode)
+            if os.getenv('ENFORCE_PORTFOLIO_DEDUP', '1') == '1':
+                natural_keys = [
+                    item_data.get("title"),
+                    item_data.get("type"),
+                    item_data.get("url"),
+                    item_data.get("summary")
+                ]
+                if all(natural_keys[:2]):  # require at least title & type
+                    existing = await conn.fetchrow(
+                        """
+                        SELECT id, title, type, url, summary, skills, thumbnail, analysis_result, created_at, updated_at
+                        FROM portfolio_items
+                        WHERE title = $1 AND type = $2 AND COALESCE(url,'') = COALESCE($3,'') AND summary = $4
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """,
+                        item_data.get("title"),
+                        item_data.get("type"),
+                        item_data.get("url"),
+                        item_data.get("summary")
+                    )
+                    if existing:
+                        # Return existing to keep endpoint idempotent for identical payload
+                        return {
+                            "id": str(existing["id"]),
+                            "title": existing["title"],
+                            "type": existing["type"],
+                            "url": existing["url"],
+                            "summary": existing["summary"],
+                            "skills": json.loads(existing["skills"]) if existing["skills"] else [],
+                            "thumbnail": existing["thumbnail"],
+                            "analysisResult": json.loads(existing["analysis_result"]) if existing["analysis_result"] else None,
+                            "createdAt": existing["created_at"].isoformat() if existing["created_at"] else None,
+                            "updatedAt": existing["updated_at"].isoformat() if existing["updated_at"] else None
+                        }
             item_id = str(uuid.uuid4())
             
             row = await conn.fetchrow("""
