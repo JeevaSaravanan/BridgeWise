@@ -1,40 +1,50 @@
-# scripts/enrich_profiles.py
-import os, time, json, uuid
-from pathlib import Path
-from typing import List, Dict, Any
-from tenacity import retry, stop_after_attempt, wait_exponential
+"""enrich_me.py
 
+Single-profile enrichment for data/me.json producing data/enriched_me.json
+in the same shape as records from enrich_profiles.py:
+[
+  {
+    "person_id": str,
+    "full_name": str,
+    "description": str,
+    "skills": [str,...],
+    "role_skills": [ {"title": str, "company": str, "skills": [str,...]} ],
+    "linkedinProfileUrl": str | None,
+    "raw": { original source object }
+  }
+]
+
+Differences from enrich_profiles.py:
+- No connections.json lookup (we trust linkedinProfileUrl already present).
+- Handles a single JSON object (me.json) not a list.
+
+Requires Azure OpenAI env vars (or adjust to your backend):
+  AZURE_OPENAI_CHAT_DEPLOYMENT
+  AZURE_OPENAI_API_VERSION
+  AZURE_OPENAI_API_KEY / endpoint etc configured for langchain_openai
+"""
+import os, json, uuid, time
+from pathlib import Path
+from typing import Dict, Any, List
+from tenacity import retry, stop_after_attempt, wait_exponential
+from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 
-from dotenv import load_dotenv
 load_dotenv()
 
-# ---------- Load input ----------
-with open('data/batch_profiles.json', 'r', encoding='utf-8') as f:
-    profiles = json.load(f)
+INPUT_PATH = Path("data/me.json")
+OUTPUT_PATH = Path("data/enriched_me.json")
 
-with open('data/connections.json', 'r', encoding='utf-8') as f:
-    connections = json.load(f)
+# ---------- Load single profile ----------
+if not INPUT_PATH.exists():
+    raise FileNotFoundError(f"Missing {INPUT_PATH}")
+with INPUT_PATH.open("r", encoding="utf-8") as f:
+    profile: Dict[str, Any] = json.load(f)
 
-# ---------- Attach profile URLs from your connections file ----------
-conn_lookup: Dict[tuple, str] = {}
-for conn in connections:
-    first = (conn.get('firstName') or '').strip().lower()
-    last  = (conn.get('lastName')  or '').strip().lower()
-    if first and last:
-        conn_lookup[(first, last)] = conn.get('profileUrl')
-
-for p in profiles:
-    first = (p.get('firstName') or '').strip().lower()
-    last  = (p.get('lastName')  or '').strip().lower()
-    profile_url = conn_lookup.get((first, last))
-    if profile_url:
-        p['linkedinProfileUrl'] = profile_url
-
-# ---------- Helpers ----------
+# ---------- Helper functions ----------
 def make_description(p: Dict[str, Any]) -> str:
-    parts = []
+    parts: List[str] = []
     if p.get('linkedinHeadline'):          parts.append(p['linkedinHeadline'])
     if p.get('linkedinJobTitle'):          parts.append(p['linkedinJobTitle'])
     if p.get('linkedinPreviousJobTitle'):  parts.append(p['linkedinPreviousJobTitle'])
@@ -44,11 +54,7 @@ def make_description(p: Dict[str, Any]) -> str:
     return ' | '.join(filter(None, parts))
 
 def extract_roles(p: Dict[str, Any]) -> List[Dict[str, str]]:
-    """
-    Build a small list of roles we know about (current + previous).
-    If you later have a full positions array, replace this with that structure.
-    """
-    roles = []
+    roles: List[Dict[str,str]] = []
     cur = p.get('linkedinJobTitle')
     cur_co = p.get('companyName') or p.get('linkedinCompanyName') or p.get('linkedinCompanyUrl') or ''
     if cur:
@@ -57,7 +63,7 @@ def extract_roles(p: Dict[str, Any]) -> List[Dict[str, str]]:
     prev_co = p.get('previousCompanyName') or p.get('linkedinPreviousCompanyUrl') or ''
     if prev:
         roles.append({"title": prev, "company": str(prev_co)[:120]})
-    return roles[:4]  # keep prompt small/cost-effective
+    return roles[:4]
 
 # ---------- Azure OpenAI (LangChain) ----------
 AZURE_CHAT_DEPLOYMENT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
@@ -78,6 +84,12 @@ SYSTEM = SystemMessage(content=(
     "}\n"
     "Guidelines: extract concrete skills/technologies/methodologies/domains; lowercase; "
     "1–3 words each; deduplicate; max 25 overall, max 10 per role."
+))
+
+# Summary system prompt (mirrors enrich_profiles optional summary)
+SUMMARY_SYSTEM = SystemMessage(content=(
+    "You are a concise professional profile summarizer. Given raw profile text, roles and extracted skills, "
+    "produce ONE polished professional summary sentence (max 50 words). Mention current role, prior relevant role/company if notable, primary domains, and 3-6 distinctive skills/technologies. Output plain text only."
 ))
 
 def make_user_prompt(description: str, roles: List[Dict[str,str]]) -> str:
@@ -101,7 +113,6 @@ def extract_skills_and_roles(description: str, roles: List[Dict[str,str]]) -> Di
     try:
         data = json.loads(raw)
     except Exception:
-        # crude repair if the model wrapped text around JSON
         start, end = raw.find("{"), raw.rfind("}")
         data = json.loads(raw[start:end+1]) if start >= 0 and end >= 0 else {"skills_overall": [], "role_skills": []}
 
@@ -115,20 +126,14 @@ def extract_skills_and_roles(description: str, roles: List[Dict[str,str]]) -> Di
         return out
 
     skills_overall = norm_list(data.get("skills_overall", []))
-    role_skills = []
+    role_skills_norm = []
     for r in data.get("role_skills", []):
         title = (r.get("title") or "").strip()
         comp  = (r.get("company") or "").strip()
         rskills = norm_list(r.get("skills", []))[:15]
         if title or comp or rskills:
-            role_skills.append({"title": title, "company": comp, "skills": rskills})
-    return {"skills_overall": skills_overall[:25], "role_skills": role_skills}
-
-# ---------- Optional LLM summary generation ----------
-SUMMARY_SYSTEM = SystemMessage(content=(
-    "You are a concise professional profile summarizer. Given raw profile text, roles and extracted skills, "
-    "produce ONE polished professional summary sentence (max 50 words). Mention current role, prior relevant role/company if notable, primary domains, and 3-6 distinctive skills/technologies. Output plain text only."
-))
+            role_skills_norm.append({"title": title, "company": comp, "skills": rskills})
+    return {"skills_overall": skills_overall[:25], "role_skills": role_skills_norm}
 
 def generate_summary(raw_description: str, roles: List[Dict[str,str]], skills: List[str]) -> str:
     if not raw_description and not roles and not skills:
@@ -145,53 +150,41 @@ def generate_summary(raw_description: str, roles: List[Dict[str,str]], skills: L
             "Raw description: " + (raw_description or "(none)") + "\n" +
             "Roles: " + "; ".join(role_snips) + "\n" +
             "Skills: " + skills_short + "\n\n" +
-            "Write summary now:" 
+            "Write summary now:"
         )
         resp = llm.invoke([SUMMARY_SYSTEM, HumanMessage(content=user_prompt)])
         text = (resp.content or '').strip()
-        # Keep it single line, truncate to 300 chars just in case
         return " ".join(text.split())[:300]
     except Exception as e:
         print(f"[WARN] Summary generation failed: {e}")
         return raw_description
 
-# ---------- Build records + call LLM ----------
-records = []
-total_profiles = len(profiles)
-for idx, p in enumerate(profiles):
-    person_id = p.get('id') or str(uuid.uuid4())
-    full_name = p.get('fullName') or f"{p.get('firstName','')} {p.get('lastName','')}".strip()
-    original_desc = make_description(p)
-    roles = extract_roles(p)
+# ---------- Process single record ----------
+person_id = profile.get('id') or str(uuid.uuid4())
+full_name = profile.get('fullName') or f"{profile.get('firstName','')} {profile.get('lastName','')}".strip()
+original_desc = make_description(profile)
+roles = extract_roles(profile)
 
-    try:
-        result = extract_skills_and_roles(original_desc, roles)
-    except Exception as e:
-        print(f"[WARN] LLM failed for {person_id}: {e}")
-        result = {"skills_overall": [], "role_skills": []}
+try:
+    result = extract_skills_and_roles(original_desc, roles)
+except Exception as e:
+    print(f"[WARN] LLM failed: {e}")
+    result = {"skills_overall": [], "role_skills": []}
 
-    # Optionally generate a refined summary (toggle with GENERATE_PROFILE_SUMMARY=0 to skip)
-    if os.getenv('GENERATE_PROFILE_SUMMARY', '1') != '0':
-        refined_desc = generate_summary(original_desc, roles, result.get('skills_overall', []))
-    else:
-        refined_desc = original_desc
+if os.getenv('GENERATE_PROFILE_SUMMARY', '1') != '0':
+    refined_desc = generate_summary(original_desc, roles, result.get('skills_overall', []))
+else:
+    refined_desc = original_desc
 
-    remaining = total_profiles - (idx + 1)
-    print(f"[INFO]  Remaining: {remaining}, Processed {person_id} ({full_name}): {len(result['skills_overall'])} skills, {len(result['role_skills'])} roles. Summary: {refined_desc[:80]}...")
-    records.append({
-        "person_id": person_id,
-        "full_name": full_name,
-        "description": refined_desc,
-        "skills": result["skills_overall"],     # overall list
-        "role_skills": result["role_skills"],   # per-role lists
-        "linkedinProfileUrl": p.get("linkedinProfileUrl"),
-        "raw": {**p, "original_description": original_desc}
-    })
+record = {
+    "person_id": person_id,
+    "full_name": full_name,
+    "description": refined_desc,
+    "skills": result["skills_overall"],
+    "role_skills": result["role_skills"],
+    "linkedinProfileUrl": profile.get("linkedinProfileUrl"),
+    "raw": {**profile, "original_description": original_desc}
+}
 
-    time.sleep(0.15)  # gentle pacing for mini/nano deployments
-
-
-# ---------- Write output ----------
-output_path = Path('data/enriched_people.json')
-output_path.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding='utf-8')
-print(f"Wrote {len(records)} rows → {output_path}")
+OUTPUT_PATH.write_text(json.dumps([record], ensure_ascii=False, indent=2), encoding='utf-8')
+print(f"Wrote enriched profile → {OUTPUT_PATH}")

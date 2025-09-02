@@ -1,0 +1,83 @@
+{
+  "person_id": "d45ee172",
+  "full_name": "Jeeva Saravana Bhavanandam",
+  "description": "Data Scientist at BorgWarner and former Product Data Scientist Consultant at Stunio, with a Master of Science in Data Science from Michigan State University, skilled in data analysis, machine learning, statistical modeling, software development, and data visualization.",
+  "skills": [
+    "data science",
+    "software development",
+    "product management",
+    "data analysis",
+    "machine learning",
+    "statistical modeling",
+    "data visualization",
+    "python",
+    "sql",
+    "big data"
+  ],
+  "role_skills": [
+    {
+      "title": "Data Scientist",
+      "company": "BorgWarner",
+      "skills": [
+        "data analysis",
+        "machine learning",
+        "statistical modeling",
+        "data visualization"
+      ]
+    },
+    {
+      "title": "Product Data Scientist Consultant",
+      "company": "Stunio",
+      "skills": [
+        "data science",
+        "product management",
+        "big data",
+        "python",
+        "sql"
+      ]
+    }
+  ],
+  "linkedinProfileUrl": "https://www.linkedin.com/in/jeeva-saravanan/",
+  "raw": {
+    "linkedinProfileUrl": "https://www.linkedin.com/in/jeeva-saravanan/",
+    "fullName": "Jeeva Saravana Bhavanandam",
+    "firstName": "Jeeva",
+    "lastName": "Saravana Bhavanandam",
+    "companyName": "BorgWarner",
+    "linkedinCompanyUrl": "https://www.linkedin.com/company/7896/",
+    "linkedinJobTitle": "Data Scientist",
+    "linkedinJobDateRange": "2024-05 – 2025-08",
+    "companyIndustry": "Information Technology & Services",
+    "linkedinHeadline": "Software Development Engineer | Microsoft Hackathon Winner | Data Scientist",
+    "location": "Arlington, Virginia",
+    "previousCompanyName": "Stunio",
+    "linkedinPreviousCompanyUrl": "https://www.linkedin.com/company/76520754/",
+    "linkedinPreviousCompanySlug": "76520754",
+    "linkedinPreviousJobTitle": "Product Data Scientist Consultant",
+    "linkedinPreviousJobDateRange": "2025-01 – 2025-04",
+    "linkedinSchoolName": "Michigan State University",
+    "linkedinSchoolDegree": "Master of Science - MS - Data Science",
+    "linkedinSchoolDateRange": "",
+    "linkedinPreviousSchoolName": "Anna University Chennai",
+    "linkedinPreviousSchoolDegree": "Bachelor of Engineering - BE - Computer Science",
+    "linkedinPreviousSchoolDateRange": "",
+    "linkedinMutualConnectionsUrl": "",
+    "linkedinProfileSlug": "jeeva-saravanan",
+    "linkedinCompanySlug": "7896",
+    "linkedinProfileUrn": "urn:li:fs_profile:ACoAAChHioMBINJX29nCevRZl6YM1fsJjv5iS3Q",
+    "id": "d45ee172",
+    "connectionDegree": "",
+    "createdAt": "2025-09-02T01:13:04.268525+00:00",
+    "updatedAt": "2025-09-02T01:13:04.268525+00:00",
+    "createdBy": "",
+    "updatedBy": "",
+    "originalConnectionData": {
+      "firstName": "Jeeva",
+      "lastName": "Saravana Bhavanandam",
+      "headline": "Software Development Engineer | Microsoft Hackathon Winner | Data Scientist",
+      "occupation": "",
+      "locationName": "Arlington, Virginia"
+    },
+    "original_description": "Software Development Engineer | Microsoft Hackathon Winner | Data Scientist | Data Scientist | Product Data Scientist Consultant | Master of Science - MS - Data Science at Michigan State University"
+  }
+}
