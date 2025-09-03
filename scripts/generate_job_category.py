@@ -1,0 +1,667 @@
+# We'll create the requested DEFAULT_TITLE_SYNONYMS list by mapping each provided title
+# to a lowercased canonical category using simple rule-based matching.
+# The resulting Python file will be saved to /mnt/data/title_synonyms.py
+
+titles = [
+".NET Developer",
+"AI Engineer",
+"AI Intern",
+"AI Research Scientist",
+"AI Science for personalization",
+"AI Software Engineer",
+"AI Specialist",
+"AI and Machine Learning Leadership",
+"AI/ML Data Scientist",
+"AI/ML Research",
+"AI/ML Specialist",
+"ASEAN / ANZ Technical Recruiter",
+"Adjunct Assistant Professor",
+"Advisor",
+"Advisor - Data Science and Product",
+"Advisor, Venture Partner",
+"Algorithm Engineer",
+"Analyst",
+"Analyst / software Engineer",
+"Application Development Analyst",
+"Application Engineer II",
+"Application and Design Engineer",
+"Applied AI Engineer",
+"Applied Science Manager",
+"Applied Science Manager - Foundational Models - Speech",
+"Applied Scientist",
+"Applied Scientist II",
+"Applied Scientist II (Product + Technical Focus)",
+"Applied Scientist, US Lead",
+"Apprentice",
+"Artificial Intelligence Engineer",
+"Artificial Intelligence Intern",
+"Assistant Lead Professional",
+"Assistant Manager - Growth",
+"Assistant Manager HR",
+"Assistant Manager Sales Marketing",
+"Assistant Manager in Admin",
+"Assistant Professor",
+"Assistant System Engineer",
+"Associate",
+"Associate API service",
+"Associate Consultant",
+"Associate Data Engineer",
+"Associate Data Scientist",
+"Associate Director, Certificate in Quantitative Finance",
+"Associate Director, Data Science & AI",
+"Associate Engineer",
+"Associate HRBP",
+"Associate II, Analytics",
+"Associate Product Engineer",
+"Associate Professor of Statistics",
+"Associate Software Engineer",
+"Associate Technical Consultant",
+"Associate Technical Engineer",
+"Associate Vice President, Data Science",
+"Authorized Officer",
+"Azure Cloud Engineer",
+"Battery Management System Control Engineer",
+"Big Data Engineer",
+"Big Data Insights & AI intern",
+"Board Member",
+"Business Analyst",
+"Business Data Analyst",
+"Business Development Intern",
+"Business Development Manager",
+"Business Intelligence Analyst",
+"Business Intelligence Analyst Intermediate",
+"Business Intelligence Engineer | Data Analyst",
+"Business Relationship Management Specialist",
+"CECI Student Assistant",
+"CEO",
+"CEO / Cofounder",
+"CTO",
+"Career Advisor",
+"Charter Member",
+"Chief Operating Officer",
+"Chief People and Systems Officer",
+"Chief Technology Officer",
+"Cloud Data Engineer",
+"Cloud Engineer- I",
+"Cloud Support Engineer - I",
+"Co-Founder",
+"Co-Founder & CEO",
+"Co-Founder and Chief AI Officer",
+"Co-Founder, CTO",
+"Commercial Account Executive",
+"Community Counselor",
+"Community Founder",
+"Computational Linear Algebra Teaching Assistant",
+"Computer Vision Data Scientist",
+"Consultant",
+"Consultant, Growth and Engagement",
+"Consultant- Mobile App and Fullstack Developer",
+"Content Creator",
+"Control Room Operator",
+"Corporate Recruiter",
+"Customer Assistant",
+"Customer Success Manager",
+"Customer Support Engineer",
+"Customer Support Engineer I",
+"Customer Support Specialist",
+"Data & Program Effectiveness Coordinator",
+"Data Analyst",
+"Data Analyst / Forecaster",
+"Data Analytic Scientist",
+"Data Engineer",
+"Data Engineer - Research Assistant",
+"Data Management & Configuration Engineer",
+"Data Science & Analytics - Finance & Business Intelligence",
+"Data Science Analyst - Products",
+"Data Science Consultant",
+"Data Science Director, Generative AI",
+"Data Science Engineer Co-op",
+"Data Science Intern",
+"Data Science Leader",
+"Data Science Manager",
+"Data Science Manager AI/ML/NLP",
+"Data Science Supervisor",
+"Data Scientist",
+"Data Scientist (Research Assistant II)",
+"Data Scientist - Research Assistant",
+"Data Scientist 2",
+"Data Scientist I",
+"Data Scientist II",
+"Data Scientist III",
+"Data Scientist, Foundry Technology Manufacturing",
+"Data Scientist, Marketing",
+"Data Scientist, Senior Associate",
+"Data and Applied Scientist II",
+"Data and Impact Intern",
+"Data engineering governance and mgmt Analyst",
+"Deep Learning Research Assistant",
+"Design & Make Ambassador",
+"Design Engineer",
+"DevOps Engineer",
+"Developer/Analyst",
+"Development Engineer 2",
+"Development Engineer-2",
+"Digital Marketing Manager",
+"Dimensional Variation Analysis Engineer",
+"Director",
+"Director - AI Strategy",
+"Director - Chennai",
+"Director Data Science Imaging Analytics",
+"Director of Data Science",
+"Director of Diversity and Inclusion",
+"Director of Engineering",
+"Director, Life Cycle Optimization",
+"Director, Plug and Play Detroit",
+"Director, Software Engineering",
+"Director, Star Rating Analytics",
+"Early Careers Recruiter & Program Manager",
+"Education Mentor",
+"Electrical Engineer",
+"Employee Communication Lead, South Asian Alliance",
+"Eng III Cslt - Data scientist",
+"Engineer",
+"Engineer II- Product Marketing",
+"Engineer Intern",
+"Engineering Project Manager",
+"Enterprise Account Director",
+"Entrepreneur in Residence",
+"Example Engineer",
+"Executive Assistant",
+"Extern, Outamation",
+"Faculty Research Assistant",
+"Fellow",
+"Financial Data Analyst",
+"Founder",
+"Founder & CEO",
+"Founder CEO",
+"Founder and உழைப்பாளி",
+"Founder | Creator",
+"Founder | Developer",
+"Founding Member (Engineering)",
+"Founding Member, US office",
+"Front End Engineer II",
+"Frontend Developer",
+"Frontend Engineer",
+"Full Professor",
+"Full Stack Developer",
+"Full Stack Developer (Contract)",
+"Full Stack Engineer",
+"Full Stack Software Engineer",
+"Full-stack Developer",
+"Fullstack .NET Developer",
+"GE90 Fleet Program Manager",
+"General Manager, NewsBreak Ads",
+"Global Banking Summer Intern",
+"Global Head Of Presales (Project Management & Helpdesk Apps)",
+"Global Practice Recruiter - Data Science",
+"Global Sourcing and Supply Manager",
+"Graduate Research Assistant",
+"Graduate Research Assistant - OER Technical & Coordination Support",
+"Graduate Research Assistant(Deep Learning)",
+"Graduate Student Research Assistant",
+"Graduate Student Researcher",
+"Graduate Teaching Assistant",
+"Growth Account Executive",
+"HR Generalist",
+"Head Of Web Development Department",
+"Head of Algorithms- Machine Learning and Computer Vision, eBeam",
+"Head of Global Recruiting",
+"Head of Growth",
+"Head of US Insurance Strategy & Planning and Sr Sales Manager",
+"Human Resources Administrator",
+"Human Resources Business Analyst",
+"Human Resources Executive",
+"Human Resources Manager",
+"IT Project Manager",
+"Integration Application Specialist",
+"Intern",
+"Internshala student partner 21",
+"Internship trainee",
+"Investment Banking Associate",
+"JUNIOR STENOGRAPHER",
+"Junior Geotechnical Design Engineer",
+"LTD Module Engineer",
+"Lead",
+"Lead Applied Scientist",
+"Lead Data Engineer",
+"Lead Data Scientist",
+"Lead Director Machine Learning Engineering",
+"Lead Engineer",
+"Lead Machine Learning",
+"Lead Product Manager",
+"Lead Software Engineer",
+"Lead Technical Consultant",
+"Lead Technical Recruiter",
+"Lecturer",
+"Lunar Agriculture and Sustainable Technologies (LAST) Working Group Member",
+"MBA Student",
+"ML Ops Engineer",
+"MLSA",
+"Machine Learning Engineer",
+"Machine Learning Engineer - Recommendations and algo",
+"Machine Learning Engineer III",
+"Machine Learning Engineering Manager",
+"Machine Learning Intern",
+"Machine Learning Internship",
+"Machine Learning Product Owner",
+"Machine Learning Research Engineer",
+"Machine Learning Research Lead",
+"Machine Learning Researcher",
+"Machine Learning Scientist III",
+"Mafioso",
+"Major Account Development",
+"Management Trainee",
+"Manager - HR",
+"Manager - National & International Partnerships",
+"Manager Design Technologist",
+"Manager, Data Science & Analytics",
+"Manager, Data Scientist",
+"Mechanical Engineer",
+"Member",
+"Member Of Technical Staff",
+"Member Of Technical Staff 3",
+"Member Technical Staff",
+"Member Technical Staff Software",
+"Member of Technical Staff",
+"Member of Technical Staff - Oracle Cloud Infrastructure (OCI)",
+"Member of Technical Staff 3",
+"Mentor",
+"Mobile Application Developer - Generative AI Enthusiast",
+"Network Engineer",
+"Network Intern",
+"Network Operations Engineer",
+"OTS Technical Recruiter",
+"Operador informático",
+"Operations Manager",
+"Organiser & Host Frontend Developer Love",
+"Outreach Specialist",
+"PHD Researcher",
+"PHD Scholar",
+"PRINCIPAL",
+"People Manager and Recruiter",
+"Physical Design Intern",
+"Platform Development Engineer 2 (System Integrations)",
+"Principal Applied Science Manager",
+"Principal Applied Scientist / Director - Mid and Post Training",
+"Principal Associate , Data Scientist",
+"Principal Associate in Data Science",
+"Principal Data Scientist",
+"Principal Data Scientist - Algorithms",
+"Principal Data Scientist: OCI Anti Fraud",
+"Principal Engineer, Founding team",
+"Principal Machine Learning Engineer",
+"Principal, Data Science and Engineering",
+"Principal, Talent Acquisition - Executive Search & Software",
+"Process Engineering Intern",
+"Product Data Analyst",
+"Product Manager",
+"Product Manager 2",
+"Product Manager L1",
+"Product Marketing Manager, Social",
+"Product Owner / Lead 3S XCPQ | CPQ Functional Expert (SHERPA X)",
+"Product Specialist",
+"Professor",
+"Professor and Dean (FME)",
+"Progammer Analyst Trainee",
+"Program Assistant",
+"Programmer Analyst",
+"Programmer Analyst Trainee",
+"Programming Analyst",
+"Project Engineer",
+"Project Manager - Software",
+"Project Trainee",
+"Public Relations Manager - APAC",
+"QA Test Automation Engineer | Playwright, Cucumber, API Testing | Java, CI/CD | Agile/Scrum",
+"Quality Analyst",
+"Quality Analyst / Software QA Engineer",
+"Quality Assurance Engineer",
+"Quality Engineer L2",
+"Quantitative Analyst",
+"Quantitative Analyst III, Power Marketing",
+"Quantitative Developer",
+"React Developer",
+"Recruiter PHD, SWE,",
+"Recruiting Consultant",
+"Recruitment Consultant",
+"Referral Network Specialist",
+"Release Operations Manager",
+"Research Analyst",
+"Research Assistant",
+"Research Associate",
+"Research Committee Chair",
+"Research Intern",
+"Research Scholar",
+"Research Scientist",
+"Research Scientist Intern",
+"Research and Business Development Intern",
+"Researcher",
+"Researcher / Virtual Assistant",
+"Resilience Lead",
+"SAP Basis Consultant",
+"SDE 2",
+"SDE II",
+"SDET| Delivery Excellence partner",
+"SVP, Chief AI Officer",
+"SailPoint Java Developer",
+"Sales Team Lead",
+"Security Researcher Intern",
+"Security Software Engineer",
+"Senior Analyst",
+"Senior Applied Scientist",
+"Senior Associate",
+"Senior Associate Consultant",
+"Senior Associate Engineer",
+"Senior Associate Software Engineer",
+"Senior Associate Technologist",
+"Senior Business Analyst, SBB",
+"Senior Consultant",
+"Senior Consultant Developer",
+"Senior Consultant | Artificial Intelligence",
+"Senior Data & AI Engineer | Azure Cloud & AI",
+"Senior Data Analyst",
+"Senior Data Engineer",
+"Senior Data Science Analyst",
+"Senior Data Scientist",
+"Senior Data Scientist - AI, Algorithms & Data Science",
+"Senior Data Scientist - Machine Learning Systems, Data Engineering",
+"Senior Data Scientist - Tech Lead",
+"Senior Data Scientist / Data Science Manager",
+"Senior Data Scientist II",
+"Senior Design Engineer",
+"Senior Developer",
+"Senior Developer Advocate",
+"Senior Director",
+"Senior Director of Product Management",
+"Senior Engineer",
+"Senior Engineer Analog/RF",
+"Senior Engineering Manager",
+"Senior Event Specialist",
+"Senior Full Life Cycle Recruiter",
+"Senior IT Recruiter",
+"Senior Lead",
+"Senior Machine Learning Engineer",
+"Senior Machine Learning Scientist",
+"Senior Management Consultant",
+"Senior Manager - Marketing & Alliances",
+"Senior Manager Analytics",
+"Senior Manager Talent Acquisition",
+"Senior Manager, Talent Acquisition",
+"Senior Manager: Advanced Data & Analysis - Corporate Advanced Engineering",
+"Senior Member of Technical Staff",
+"Senior Network Engineer",
+"Senior PeopleSoft Developer",
+"Senior Product Delivery Associate",
+"Senior Product Designer",
+"Senior Product Manager",
+"Senior Quality Engineer",
+"Senior R&D Engineer (Privacy & Security)",
+"Senior Recruiter",
+"Senior Recruiter, Amazon University Talent Acquisition",
+"Senior Recruiting Associate",
+"Senior Researcher",
+"Senior Site Reliability Engineer",
+"Senior Software Development Engineer",
+"Senior Software Engineer",
+"Senior Software Engineer (BDE - AWS)",
+"Senior Software Engineer I",
+"Senior Software Engineer II",
+"Senior Software Engineer L5",
+"Senior Software Engineering Manager",
+"Senior Software Test Engineer I",
+"Senior Solution Consultant",
+"Senior Sourcing Specialist",
+"Senior Staff Engineer",
+"Senior Talent Acquisition Partner - Engineering",
+"Senior Talent Acquisition Recruiter",
+"Senior Technical Recruiter",
+"Senior Technical Recruiter - Project Kuiper",
+"Senior Technical Sourcing Recruiter",
+"Senior associate software engineer",
+"Senior manager - Data science, Walmart International Supply chain strategy",
+"Shift Manager",
+"Shipping Market Analysis / Tanker Claims / Global Trainee Broker",
+"Site Reliability Engineer",
+"Snr Talent Acquisition Partner (via LevelUp HCS)",
+"Software Dev Engineer I",
+"Software Developer",
+"Software Developer 2",
+"Software Developer 3",
+"Software Developer Senior Associate",
+"Software Development Engineer",
+"Software Development Engineer - 2",
+"Software Development Engineer 1",
+"Software Development Engineer 2",
+"Software Development Engineer II",
+"Software Development Intern",
+"Software Development Manager III",
+"Software Development Manager, Identity Services",
+"Software Engineer",
+"Software Engineer (AI/ML)",
+"Software Engineer - 3",
+"Software Engineer - Data",
+"Software Engineer - Recommendations",
+"Software Engineer 2",
+"Software Engineer 3",
+"Software Engineer Associate",
+"Software Engineer Co-op",
+"Software Engineer I",
+"Software Engineer II",
+"Software Engineer III",
+"Software Engineer Intern",
+"Software Engineering Co-Op",
+"Software Engineering Intern",
+"Software Engineering Manager",
+"Software Engineering Manager AI/ML",
+"Software Engineering Manager, Machine Learning",
+"Software Engineering Specialist",
+"Software Performance Engineering Co-op",
+"Software Project Developer",
+"Software QA Engineer",
+"Software Quality Engineer",
+"Software Trainee",
+"Software development engineer",
+"Software/Data Engineering Consultant",
+"Solution Sales Advisor",
+"Solutions Architect",
+"Solutions Engineer",
+"Specialist Software Engineer",
+"Sr Analyst III Software Engineering",
+"Sr Analyst, Data Science",
+"Sr Associate Software Developement Engineer",
+"Sr Data Scientist",
+"Sr Manager, Research Science",
+"Sr. Director of Artificial Intelligence",
+"Sr. ML Recruiter",
+"Sr. Manager Analytics & Science - Amazon Search and Converstational Shopping",
+"Sr. Manager, Applied Science",
+"Sr. Principal Engineer, Test Chip Engineering Group, Technology Design Enablement",
+"Sr. Process Engineering Manager",
+"Sr. Recruiting Leader",
+"Sr. Staff Engineer and Manager",
+"Sr.Architect | Sr.Director",
+"Staff Data Scientist",
+"Staff Data Scientist II",
+"Staff Machine Learning Engineer",
+"Staff Software Engineer",
+"Student",
+"Student Assistant",
+"Student Worker",
+"Supply Chain Data Scientist",
+"Supply Chain Management",
+"Supply Chain Manager, Battery Cell",
+"System Development Engineer 2",
+"System Engineer",
+"System Engineer - Devops",
+"System Engineer Trainee",
+"Systems Design Software Manager",
+"Talent",
+"Talent Acquisition",
+"Talent Acquisition Manager",
+"Talent Advisor - Supporting Google",
+"Tax Consultant",
+"Teaching Assistant",
+"Teaching Assistant - Robotics: AI Techniques",
+"Teaching Assistant, Statistics for Data Science",
+"Team Lead Recruitment",
+"Tech Writer UX Specialist",
+"Technical Co-founder",
+"Technical Consultant",
+"Technical Engineer",
+"Technical Lead",
+"Technical Lead - Skywise",
+"Technical Program Manager",
+"Technical Program Manager II",
+"Technical Program Specialist",
+"Technical Recruiter",
+"Technical Sourcing Recruiter, Science & Machine Learning - Artificial General Intelligence (AGI)",
+"Technical Specialist",
+"Technical Team Manager",
+"Technical Writer",
+"Technical staff member",
+"Test Analyst",
+"Trainer",
+"Trial Database Programmer",
+"Tutor - Machine Learning",
+"US Early Career Recruiting Leader",
+"University Relations Program Manager",
+"Vice President of Artificial Intelligence",
+"Visiting Graduate Student",
+"Web Development Intern",
+"Web3 Digital Marketing Lead at FABC LLC, Dubai",
+"Website Developer",
+"Writing",
+"Zoho Developer",
+"student",
+"unemployed",
+"voice process",
+"xEV System Planning Engineer",
+]
+
+import re
+from pprint import pformat
+
+def categorize(title: str) -> str:
+    t = title.lower()
+    # Keep exact "student" and "unemployed" titles as-is
+    if t.strip() in {"student", "unemployed"}:
+        return t.strip()
+    # Founders / CEOs
+    if any(k in t for k in ["co-founder", "cofounder", "founder", "ceo", "chief executive officer"]):
+        return "founder/ceo"
+    # Executives (cto, coo, svp, vp, director (non-product))
+    if any(k in t for k in ["chief technology officer", "cto", "chief operating officer", "svp", "vice president"]):
+        return "executive"
+    # Recruiting / Talent / HR
+    if any(k in t for k in ["recruit", "talent acquisition", "technical recruiter", "recruiter", "hrbp", "human resources", "hr " , " hr", "people"]):
+        return "recruiting/hr"
+    # Product (anything with 'product' anywhere)
+    if "product" in t:
+        return "product"
+    # Design (anything with 'design' anywhere)
+    if "design" in t and "product" not in t:
+        return "design"
+    # ML Engineer / Scientist family (ai/ml, machine learning, applied scientist, research scientist in ai/ml)
+    if any(k in t for k in [
+        "ml ", " ml", "machine learning", "ai/", "ai ", " ai", "artificial intelligence", "applied scientist", "research scientist", "data and applied scientist"
+    ]):
+        # But carve out obvious data scientist roles separately
+        if "data scientist" in t:
+            # Per instruction, ml scientist -> ml engineer; but pure "data scientist" should be data scientist
+            if any(k in t for k in ["ml", "machine learning", "ai"]):
+                return "ml engineer"
+            return "data scientist"
+        # Roles that are clearly "intern" variants in ML/AI
+        if "intern" in t or "trainee" in t or "co-op" in t or "co-op" in t:
+            return "intern"
+        return "ml engineer"
+    # Data Scientist (pure)
+    if "data scientist" in t:
+        return "data scientist"
+    # Data Engineer
+    if "data engineer" in t or "big data engineer" in t or "cloud data engineer" in t:
+        return "data engineer"
+    # Analyst
+    if "analyst" in t:
+        return "analyst"
+    # DevOps / SRE / System DevOps
+    if any(k in t for k in ["devops", "site reliability engineer", "sre", "system engineer - devops"]):
+        return "devops/sre"
+    # Software Engineer / Developer / Programmer / SDE
+    if any(k in t for k in [
+        "software engineer", "sde", "developer", "programmer", "member of technical staff", "mots", "mts",
+        ".net developer", "full stack", "frontend", "backend", "react developer", "zoho developer",
+        "solutions engineer", "software qa engineer", "software quality engineer", "software project developer",
+        "software development engineer", "software engineering manager", "software engineering specialist"
+    ]):
+        return "software engineer"
+    # Cloud Engineer
+    if "cloud engineer" in t or "cloud support engineer" in t or "azure cloud engineer" in t:
+        return "cloud engineer"
+    # Security
+    if "security" in t:
+        return "security"
+    # Solutions Architect
+    if "solutions architect" in t or "architect" in t:
+        return "architect"
+    # QA / Quality
+    if "quality" in t or "qa " in t or t.startswith("qa "):
+        return "qa"
+    # Consultant / Advisor
+    if any(k in t for k in ["consultant", "advisor"]):
+        return "consultant/advisor"
+    # Manager / Program / Project / Operations / Lead (generic management)
+    if any(k in t for k in ["manager", "program manager", "project manager", "operations manager", "lead ", "lead,", "lead-", "lead/"]):
+        return "management"
+    # Sales / Marketing / BD / Account Executive / PR
+    if any(k in t for k in ["marketing", "sales", "business development", "account executive", "public relations"]):
+        return "sales/marketing"
+    # Academic / Teaching / Professor / Lecturer / Teaching Assistant / Graduate Student
+    if any(k in t for k in ["professor", "lecturer", "teaching assistant", "graduate", "adjunct", "visiting graduate student", "student research", "faculty"]):
+        return "academic"
+    # Research (non-ML)
+    if "research" in t:
+        return "research"
+    # Engineer (non-software generic or hardware)
+    if "engineer" in t:
+        return "engineer"
+    # Interns / trainees / co-op
+    if any(k in t for k in ["intern", "trainee", "co-op", "co-op", "co op"]):
+        return "intern"
+    # Support / Customer / Support Engineer
+    if any(k in t for k in ["customer", "support", "assistant"]):
+        return "support"
+    # Network
+    if "network" in t:
+        return "network engineer"
+    # Supply chain
+    if "supply chain" in t:
+        return "supply chain"
+    # Finance / Quant
+    if any(k in t for k in ["quantitative", "investment banking", "finance", "financial"]):
+        return "finance/quant"
+    # HR admin specifically (some might slip past earlier)
+    if "human resources" in t or t.strip() == "hr":
+        return "recruiting/hr"
+    # Writer / Content
+    if any(k in t for k in ["writer", "content creator", "writing"]):
+        return "content/writing"
+    # Operations / admin
+    if any(k in t for k in ["operations", "admin", "administrator"]):
+        return "operations"
+    # Others
+    return "other"
+
+DEFAULT_TITLE_SYNONYMS = [{"contains": t.lower(), "canon": categorize(t)} for t in titles]
+
+def to_camel_case(s: str) -> str:
+    if s in {"student", "unemployed"}:  # Keep as-is
+        return s
+    parts = s.split("/")
+    return "/".join([p.title().replace(" ", "") for p in parts])
+
+DEFAULT_TITLE_SYNONYMS_CAMEL = [
+    {"contains": d["contains"], "canon": to_camel_case(d["canon"])}
+    for d in DEFAULT_TITLE_SYNONYMS
+]
+
+print(DEFAULT_TITLE_SYNONYMS_CAMEL)

@@ -1,0 +1,26 @@
+{
+  "timestamp": 1756881073,
+  "parameters": {
+    "min_shared_skills": 4,
+    "weight_mode": "count",
+    "boost_company": 1.0,
+    "boost_school": 0.5,
+    "exclude": [],
+    "max_iter": 20,
+    "output": "data/graph_metrics_snapshot.json",
+    "embed_top_k": 0,
+    "embed_scale": 1.0,
+    "jobs_json": "/Users/jeeva/Documents/BridgeWise/data/enriched_people.json",
+    "title_synonyms_json": "",
+    "job_edge_weight": 1.0,
+    "rank_goal_text": null,
+    "rank_goal_skills": null,
+    "rank_goal_title": null,
+    "rank_alpha_skills": 0.4,
+    "rank_beta_job": 0.3,
+    "rank_gamma_struct": 0.3,
+    "rank_top_k": 20,
+    "rank_write": false
+  },
+  "notes": "Job communities computed from grouped canon (p.jobTitleCanon) using Title base+canon mapping with fallback from p.title."
+}

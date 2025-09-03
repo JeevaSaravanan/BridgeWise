@@ -25,11 +25,10 @@ nodes when running the loader multiple times.
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 
 from neo4j import GraphDatabase  # type: ignore
-
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore
 load_dotenv()
 
 def load_people(path: Path) -> List[Dict[str, Any]]:
@@ -63,39 +62,56 @@ def load_graph(records: List[Dict[str, Any]]):
     driver = connect_driver()
     with driver.session() as session:
         session.execute_write(ensure_constraints)
-        # Create Person nodes and direct skill relations
+        # Create Person nodes and direct skill relations while session is open
         for rec in records:
             person_id: str = rec["person_id"]
             name: str = rec.get("full_name") or ""
             description: str = rec.get("description") or ""
             skills: List[str] = rec.get("skills", [])
+            # Deduplicate skills while preserving order
+            if skills:
+                skills = list(dict.fromkeys([s for s in skills if s]))
             role_skills: List[Dict[str, Any]] = rec.get("role_skills", [])
-            linkedin_job_title: str = rec.get("linkedinJobTitle") or ""
-            # If linkedinJobTitle is missing, try to get from first role
-            if not linkedin_job_title and role_skills:
-                first_role = role_skills[0]
-                linkedin_job_title = first_role.get("title", "")
-            # Upsert person with skills and linkedinJobTitle properties
+            # Derive additional person properties for richer analysis.
+            raw: Dict[str, Any] = rec.get("raw", {})  # type: ignore
+            title: str = rec.get("linkedinJobTitle") or raw.get("linkedinJobTitle") or ""
+            if not title and description:
+                title = description.split("|")[0].strip()
+            company: str = (
+                raw.get("companyName")
+                or raw.get("linkedinCompanyName")
+                or raw.get("previousCompanyName")
+                or raw.get("linkedinPreviousCompanyName")
+                or ""
+            )
+            school: str = (
+                raw.get("linkedinSchoolName")
+                or raw.get("linkedinPreviousSchoolName")
+                or ""
+            )
             session.execute_write(
-                lambda tx, pid, nm, desc, skl, job: tx.run(
+                lambda tx, pid, nm, desc, ttl, comp, sch, skl: tx.run(
                     "MERGE (p:Person {id:$pid}) "
-                    "SET p.name=$nm, p.description=$desc, p.skills=$skl, p.linkedinJobTitle=$job",
+                    "SET p.name=$nm, p.description=$desc, p.title=$ttl, "
+                    "p.company=$comp, p.school=$sch, p.skills=$skl",
                     pid=pid,
                     nm=nm,
                     desc=desc,
-                    skl=skills,
-                    job=linkedin_job_title,
+                    ttl=ttl,
+                    comp=comp,
+                    sch=sch,
+                    skl=skl,
                 ),
                 person_id,
                 name,
                 description,
+                title,
+                company,
+                school,
                 skills,
-                linkedin_job_title,
             )
             # Upsert skills and relationships
             for skill in skills:
-                if not skill:
-                    continue
                 session.execute_write(
                     lambda tx, pid, sk: tx.run(
                         "MERGE (s:Skill {name:$sk}) "
@@ -109,14 +125,10 @@ def load_graph(records: List[Dict[str, Any]]):
                 )
             # Upsert role skills if present
             for role in role_skills:
-                title = role.get("title") or ""
-                company = role.get("company") or ""
-                # Compose a stable role ID.  Combining person_id, title and company
-                # ensures uniqueness even if multiple people share the same title at
-                # the same company.
-                role_id = f"{person_id}:{title}:{company}"
+                role_title = role.get("title") or ""
+                role_company = role.get("company") or ""
+                role_id = f"{person_id}:{role_title}:{role_company}"
                 rskills: List[str] = role.get("skills") or []
-                # Upsert role node and connect person to role
                 session.execute_write(
                     lambda tx, rid, ttl, comp, pid: tx.run(
                         "MERGE (r:Role {id:$rid}) "
@@ -124,16 +136,15 @@ def load_graph(records: List[Dict[str, Any]]):
                         "WITH r MATCH (p:Person {id:$pid}) "
                         "MERGE (p)-[:HAS_ROLE]->(r)",
                         rid=rid,
-                        ttl=title,
-                        comp=company,
+                        ttl=role_title,
+                        comp=role_company,
                         pid=person_id,
                     ),
                     role_id,
-                    title,
-                    company,
+                    role_title,
+                    role_company,
                     person_id,
                 )
-                # Connect role to each skill
                 for sk in rskills:
                     if not sk:
                         continue
