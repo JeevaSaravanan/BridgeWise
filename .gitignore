@@ -181,3 +181,6 @@ venv.bak/
 .pytest_cache/*
 .ipynb_checkpoints
 .webassets-cache
+
+venv
+venv/*
