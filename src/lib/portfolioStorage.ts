@@ -17,6 +17,7 @@ export interface PortfolioItem {
   type: 'github' | 'url' | 'file';
   url?: string;
   summary: string;
+  description?: string;  // Add description field
   skills: string[];
   categorizedSkills?: {
     technical_skills: string[];

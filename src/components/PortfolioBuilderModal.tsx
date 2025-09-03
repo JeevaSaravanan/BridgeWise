@@ -28,7 +28,9 @@ import {
   Award,
   TrendingUp,
   Database,
-  Wrench
+  Wrench,
+  Globe,
+  Link
 } from "lucide-react";
 
 interface PortfolioBuilderModalProps {
@@ -37,19 +39,16 @@ interface PortfolioBuilderModalProps {
   onPortfolioCreated: (portfolio: any) => void;
 }
 
-const mockSkills = [
-  "React", "TypeScript", "Product Strategy", "User Research", "API Design",
-  "Data Analysis", "Machine Learning", "Project Management", "Leadership",
-  "Figma", "Python", "SQL", "A/B Testing", "Agile"
-];
-
 export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: PortfolioBuilderModalProps) => {
   const [step, setStep] = useState<'upload' | 'processing' | 'review'>('upload');
   const [selectedType, setSelectedType] = useState<'github' | 'file' | 'url'>('github');
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
+  const [autoFilledTitle, setAutoFilledTitle] = useState(false);
+  const [autoFilledDescription, setAutoFilledDescription] = useState(false);
   const [extractedSkills, setExtractedSkills] = useState<string[]>([]);
+  const [suggestedSkills, setSuggestedSkills] = useState<string[]>([]); // AI-suggested additional skills
   const [categorizedSkills, setCategorizedSkills] = useState<{
     technical_skills: string[];
     soft_skills: string[];
@@ -397,12 +396,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
         const extractedContent = await processDocument(selectedFile);
         setExtractedText(extractedContent);
 
-        setProcessingMessage("Analyzing content with AI...");
-        setProcessingProgress(95);
-
-        // Analyze the extracted text
-        await analyzeDocumentContent(extractedContent);
-
+        setProcessingMessage("Analysis complete");
         setProcessingProgress(100);
         await new Promise(resolve => setTimeout(resolve, 300));
         setStep('review');
@@ -412,8 +406,50 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
         setFileError(error instanceof Error ? error.message : 'Failed to process document');
         setStep('upload');
       }
+    } else if (selectedType === 'url' && url) {
+      // Simulated web link processing
+      const interval = setInterval(() => {
+        setProcessingProgress(prev => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setStep('review');
+            
+            // Create simulated skills and summary based on the URL
+            let domainBased = '';
+            try {
+              const domain = new URL(url).hostname.replace('www.', '');
+              domainBased = domain.split('.')[0].toLowerCase();
+            } catch (e) {
+              domainBased = 'web';
+            }
+            
+            // Skills based on URL domain
+            const skillsByDomain: Record<string, string[]> = {
+              'github': ['Git', 'Version Control', 'Coding', 'Open Source'],
+              'medium': ['Technical Writing', 'Communication', 'Knowledge Sharing', 'Content Creation'],
+              'dev': ['Web Development', 'Coding', 'Technical Writing', 'Knowledge Sharing'],
+              'linkedin': ['Networking', 'Professional Development', 'Career Growth', 'Communication'],
+              'youtube': ['Video Production', 'Content Creation', 'Knowledge Sharing', 'Presentation Skills'],
+              'default': ['Web Research', 'Information Analysis', 'Digital Literacy', 'Resource Management']
+            };
+            
+            const skills = skillsByDomain[domainBased] || skillsByDomain.default;
+            const summary = `A web resource focused on ${skills.join(', ').toLowerCase()} that demonstrates knowledge and interest in this domain. The content provides insights into professional capabilities and areas of expertise.`;
+            
+            setExtractedSkills(skills);
+            setSelectedSkills(skills); // Auto-select all extracted skills
+            setGeneratedSummary(summary);
+            
+            // Auto-generate title and description for URL
+            autoGenerateTitleAndDescription('', summary);
+            
+            return 100;
+          }
+          return prev + 10;
+        });
+      }, 200);
     } else {
-      // Original simulation logic for non-file types
+      // Original simulation logic for other types
       const interval = setInterval(() => {
         setProcessingProgress(prev => {
           if (prev >= 100) {
@@ -447,6 +483,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
         type: selectedType,
         url: selectedType === 'url' || selectedType === 'github' ? url : undefined,
         summary: generatedSummary,
+        description: description,  // Include description field
         skills: selectedSkills,
         categorizedSkills: categorizedSkills,
         thumbnail: selectedType === 'github' ? '💻' : selectedType === 'file' ? '📄' : '🔗',
@@ -465,6 +502,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
         type: selectedType,
         url: selectedType === 'url' || selectedType === 'github' ? url : undefined,
         summary: generatedSummary,
+        description: description,  // Include description field
         skills: selectedSkills,
         categorizedSkills: categorizedSkills,
         thumbnail: selectedType === 'github' ? '💻' : selectedType === 'file' ? '📄' : '🔗',
@@ -498,6 +536,9 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
     setUrl('');
     setDescription('');
     setSelectedSkills([]);
+    setSuggestedSkills([]); // Reset AI-suggested skills
+    setAutoFilledTitle(false);
+    setAutoFilledDescription(false);
     setCategorizedSkills({
       technical_skills: [],
       soft_skills: [],
@@ -687,18 +728,38 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
       // Use the new API-enabled processing method
       const result = await DocumentProcessor.processDocumentWithAPI(file);
       
-      // Store the extracted data including categorized skills
+      // Store the extracted data including categorized skills and suggestions
       setExtractedSkills(result.skills);
       setSelectedSkills(result.skills);
       setCategorizedSkills(result.categorizedSkills);
+      setSuggestedSkills(result.suggestedSkills || []); // Store AI-generated suggestions (with fallback)
       setGeneratedSummary(result.summary);
       setAnalysisResult(result);
+      
+      // Auto-fill title and description based on type
+      if (selectedType === 'url') {
+        // For URL type, use our custom generation function
+        autoGenerateTitleAndDescription(result.text, result.summary);
+      } else if (selectedType === 'file') {
+        // For file uploads, use the API-generated title and description if available
+        if (result.generatedTitle && !title.trim()) {
+          setTitle(result.generatedTitle);
+          setAutoFilledTitle(true);
+        }
+        
+        if (result.generatedDescription && !description.trim()) {
+          setDescription(result.generatedDescription);
+          setAutoFilledDescription(true);
+        }
+      }
       
       // Store metadata for potential future use
       console.log('Document processing metadata:', result.metadata);
       console.log('Extracted skills:', result.skills);
       console.log('Categorized skills:', result.categorizedSkills);
       console.log('Generated summary:', result.summary);
+      if (result.generatedTitle) console.log('Generated title:', result.generatedTitle);
+      if (result.generatedDescription) console.log('Generated description:', result.generatedDescription);
       
       return result.text;
     } catch (error) {
@@ -713,6 +774,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
       setExtractedSkills(result.skills);
       setSelectedSkills(result.skills);
       setCategorizedSkills(result.categorizedSkills);
+      setSuggestedSkills(result.suggestedSkills || []); // Store AI-generated suggestions (with fallback)
       setGeneratedSummary(result.summary);
       setAnalysisResult(result);
       return result.text;
@@ -730,6 +792,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
       setExtractedSkills(result.skills);
       setSelectedSkills(result.skills);
       setCategorizedSkills(result.categorizedSkills);
+      setSuggestedSkills(result.suggestedSkills); // Store AI-generated suggestions
       setGeneratedSummary(result.summary);
       setAnalysisResult(result);
       return result.text;
@@ -747,6 +810,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
       setExtractedSkills(result.skills);
       setSelectedSkills(result.skills);
       setCategorizedSkills(result.categorizedSkills);
+      setSuggestedSkills(result.suggestedSkills); // Store AI-generated suggestions
       setGeneratedSummary(result.summary);
       setAnalysisResult(result);
       return result.text;
@@ -758,15 +822,115 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
     }
   };
 
-  const analyzeDocumentContent = async (text: string): Promise<void> => {
-    // This method is now mainly a fallback since the API handles analysis
-    if (!extractedSkills.length && !generatedSummary) {
-      const skills = DocumentProcessor.extractSkillsFromText(text);
-      const summary = DocumentProcessor.generateSummary(text, skills);
+  const processURL = async (urlToProcess: string) => {
+    // For now, we'll use simulation since we don't have a dedicated URL processor in the API
+    setProcessingMessage("Analyzing web resource...");
+    setProcessingProgress(20);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    setProcessingMessage("Extracting content...");
+    setProcessingProgress(50);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    setProcessingMessage("Identifying key skills...");
+    setProcessingProgress(70);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    setProcessingMessage("Generating analysis...");
+    setProcessingProgress(90);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    setProcessingProgress(100);
+    
+    // Create simulated skills and summary based on the URL
+    let domainBased = '';
+    try {
+      const domain = new URL(urlToProcess).hostname.replace('www.', '');
+      domainBased = domain.split('.')[0].toLowerCase();
+    } catch (e) {
+      domainBased = 'web';
+    }
+    
+    // Skills based on URL domain
+    const skillsByDomain: Record<string, string[]> = {
+      'github': ['Git', 'Version Control', 'Coding', 'Open Source'],
+      'medium': ['Technical Writing', 'Communication', 'Knowledge Sharing', 'Content Creation'],
+      'dev': ['Web Development', 'Coding', 'Technical Writing', 'Knowledge Sharing'],
+      'linkedin': ['Networking', 'Professional Development', 'Career Growth', 'Communication'],
+      'youtube': ['Video Production', 'Content Creation', 'Knowledge Sharing', 'Presentation Skills'],
+      'default': ['Web Research', 'Information Analysis', 'Digital Literacy', 'Resource Management']
+    };
+    
+    const skills = skillsByDomain[domainBased] || skillsByDomain.default;
+    const summary = `A web resource focused on ${skills.join(', ').toLowerCase()} that demonstrates knowledge and interest in this domain. The content provides insights into professional capabilities and areas of expertise.`;
+    
+    setExtractedSkills(skills);
+    setSelectedSkills(skills);
+    setGeneratedSummary(summary);
+    
+    // Auto-generate title and description
+    autoGenerateTitleAndDescription('', summary);
+    
+    // Set step to review
+    setStep('review');
+  };
 
-      setExtractedSkills(skills);
-      setSelectedSkills(skills);
-      setGeneratedSummary(summary);
+  const autoGenerateTitleAndDescription = (text: string, summary: string) => {
+    // If title is empty, generate a concise title from text or summary
+    if (!title.trim() && selectedType === 'url') {
+      // Create a short title from the URL or summary
+      let generatedTitle = "";
+      
+      // Extract domain name from URL for use in title
+      try {
+        const domain = new URL(url).hostname.replace('www.', '');
+        const domainParts = domain.split('.');
+        const siteName = domainParts[0].charAt(0).toUpperCase() + domainParts[0].slice(1);
+        
+        if (summary) {
+          // Extract first 4-5 meaningful words from summary
+          const words = summary.split(' ')
+            .filter(word => word.length > 3)
+            .slice(0, 5)
+            .join(' ');
+          
+          generatedTitle = `${siteName}: ${words}`;
+        } else {
+          generatedTitle = `${siteName} Resource`;
+        }
+        
+        // Trim to reasonable length (max 40 chars)
+        if (generatedTitle.length > 40) {
+          generatedTitle = generatedTitle.substring(0, 37) + '...';
+        }
+        
+        setTitle(generatedTitle);
+        setAutoFilledTitle(true);
+      } catch (e) {
+        // Fallback if URL parsing fails
+        const defaultTitle = "Web Resource";
+        setTitle(defaultTitle);
+        setAutoFilledTitle(true);
+      }
+    }
+    
+    // If description is empty, use a shortened version of summary
+    if (!description.trim() && selectedType === 'url' && summary) {
+      // Create a concise description from the summary
+      let shortDescription = summary;
+      
+      // Limit to 2 sentences or 150 chars
+      const sentences = summary.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      if (sentences.length > 1) {
+        shortDescription = sentences.slice(0, 2).join('. ') + '.';
+      }
+      
+      if (shortDescription.length > 150) {
+        shortDescription = shortDescription.substring(0, 147) + '...';
+      }
+      
+      setDescription(shortDescription);
+      setAutoFilledDescription(true);
     }
   };
 
@@ -931,19 +1095,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                     </div>
                   )}
 
-                  <div>
-                    <label className="text-sm font-medium">
-                      Title
-                      {selectedType === 'github' && urlValidation.repoInfo?.name === title && (
-                        <span className="ml-1 text-xs text-green-600">✨ Auto-filled</span>
-                      )}
-                    </label>
-                    <Input
-                      placeholder="e.g., React Dashboard Project"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                    />
-                  </div>
+                
 
                
 
@@ -1007,19 +1159,45 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                         </div>
                       )}
                     </div>
-                  )}
-
-                  <div>
+                  )}                    <div>
                     <label className="text-sm font-medium">
-                      Description (Optional)
-                      {selectedType === 'github' && urlValidation.repoInfo?.description === description && (
+                      Title
+                      {(
+                        (selectedType === 'github' && urlValidation.repoInfo?.name === title) || 
+                        (selectedType === 'url' && autoFilledTitle) ||
+                        (selectedType === 'file' && autoFilledTitle)
+                      ) && (
+                        <span className="ml-1 text-xs text-green-600">✨ Auto-filled</span>
+                      )}
+                       <Input
+                      placeholder={selectedType === 'url' || selectedType === 'file' ? "Will be auto-generated after analysis" : "e.g., React Dashboard Project"}
+                      value={title}
+                      onChange={(e) => {
+                        setTitle(e.target.value);
+                        if (autoFilledTitle) setAutoFilledTitle(false);
+                      }}
+                    />
+                    </label>
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium">
+                        Description {selectedType !== 'url' && "(Optional)"}
+                      {(
+                        (selectedType === 'github' && urlValidation.repoInfo?.description === description) || 
+                        (selectedType === 'url' && autoFilledDescription) ||
+                        (selectedType === 'file' && autoFilledDescription)
+                      ) && (
                         <span className="ml-1 text-xs text-green-600">✨ Auto-filled</span>
                       )}
                     </label>
                     <Textarea
-                      placeholder="Brief description of the project or work..."
+                      placeholder={selectedType === 'url' || selectedType === 'file' ? "Will be auto-generated after analysis" : "Brief description of the project or work..."}
                       value={description}
-                      onChange={(e) => setDescription(e.target.value)}
+                      onChange={(e) => {
+                        setDescription(e.target.value);
+                        if (autoFilledDescription) setAutoFilledDescription(false);
+                      }}
                       rows={3}
                     />
                   </div>
@@ -1028,7 +1206,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                 <Button 
                   onClick={handleFileUpload} 
                   disabled={
-                    !title || 
+                    (selectedType === 'github' && !title) || 
                     (selectedType === 'github' && (!url || urlValidation.isValid !== true)) ||
                     (selectedType === 'url' && !url) ||
                     (selectedType === 'file' && !selectedFile) ||
@@ -1091,19 +1269,134 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                     <CardDescription>Extracted text from your uploaded document</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="max-h-48 overflow-y-auto p-3 bg-muted rounded-lg border">
-                      <pre className="text-sm whitespace-pre-wrap font-sans">
-                        {extractedText.length > 1000 
-                          ? `${extractedText.substring(0, 1000)}...` 
-                          : extractedText
-                        }
-                      </pre>
-                    </div>
-                    {extractedText.length > 1000 && (
-                      <div className="text-xs text-muted-foreground mt-2">
-                        Showing first 1000 characters. Full content will be analyzed.
+                    <div className="space-y-4">
+                      {/* Always show title and description in the preview once they exist */}
+                      {title && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-sm">Title</h4>
+                            {autoFilledTitle && (
+                              <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">✨ Auto-filled</span>
+                            )}
+                          </div>
+                          <Input 
+                            value={title}
+                            onChange={(e) => {
+                              setTitle(e.target.value);
+                              if (e.target.value !== title) {
+                                setAutoFilledTitle(false);
+                              }
+                            }}
+                            className="border-primary/20 focus:border-primary"
+                          />
+                        </div>
+                      )}
+                      
+                      {description && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-sm">Description</h4>
+                            {autoFilledDescription && (
+                              <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">✨ Auto-filled</span>
+                            )}
+                          </div>
+                          <Textarea 
+                            value={description}
+                            onChange={(e) => {
+                              setDescription(e.target.value);
+                              if (e.target.value !== description) {
+                                setAutoFilledDescription(false);
+                              }
+                            }}
+                            className="border-primary/20 focus:border-primary"
+                            rows={3}
+                          />
+                        </div>
+                      )}
+                      
+                      <div>
+                        <h4 className="font-medium text-sm mb-2">Document Content</h4>
+                        <div className="max-h-48 overflow-y-auto p-3 bg-muted rounded-lg border">
+                          <pre className="text-sm whitespace-pre-wrap font-sans">
+                            {extractedText.length > 1000 
+                              ? `${extractedText.substring(0, 1000)}...` 
+                              : extractedText
+                            }
+                          </pre>
+                        </div>
+                        {extractedText.length > 1000 && (
+                          <div className="text-xs text-muted-foreground mt-2">
+                            Showing first 1000 characters. Full content will be analyzed.
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* URL Content Preview Card */}
+              {selectedType === 'url' && url && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Globe className="w-5 h-5 text-primary" />
+                      Web Resource Preview
+                    </CardTitle>
+                    <CardDescription>Content from your provided URL</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 p-3 bg-muted rounded-lg border overflow-hidden">
+                        <Link className="w-4 h-4 flex-shrink-0 text-primary" />
+                        <span className="text-sm font-medium truncate">{url}</span>
+                      </div>
+                      
+                      {/* Always show title in the preview once it exists */}
+                      {title && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-sm">Title</h4>
+                            {autoFilledTitle && (
+                              <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">✨ Auto-filled</span>
+                            )}
+                          </div>
+                          <Input 
+                            value={title}
+                            onChange={(e) => {
+                              setTitle(e.target.value);
+                              if (e.target.value !== title) {
+                                setAutoFilledTitle(false);
+                              }
+                            }}
+                            className="border-primary/20 focus:border-primary"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Always show description in the preview once it exists */}
+                      {description && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-sm">Description</h4>
+                            {autoFilledDescription && (
+                              <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">✨ Auto-filled</span>
+                            )}
+                          </div>
+                          <Textarea 
+                            value={description}
+                            onChange={(e) => {
+                              setDescription(e.target.value);
+                              if (e.target.value !== description) {
+                                setAutoFilledDescription(false);
+                              }
+                            }}
+                            className="border-primary/20 focus:border-primary"
+                            rows={3}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               )}
@@ -1509,22 +1802,27 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                       </div>
                     )}
                     
-                    <div className="text-sm font-medium mb-2">Add More Skills</div>
+                    <div className="text-sm font-medium mb-2">AI-Suggested Additional Skills</div>
                     <div className="flex flex-wrap gap-2">
-                      {mockSkills
-                        .filter(skill => !extractedSkills.includes(skill) && !categorizedSkills.all_skills.includes(skill))
-                        .map((skill) => (
-                          <Badge
-                            key={skill}
-                            variant={selectedSkills.includes(skill) ? "default" : "secondary"}
-                            className="cursor-pointer flex items-center gap-1"
-                            onClick={() => handleSkillToggle(skill)}
-                          >
-                            {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
-                            {skill}
-                          </Badge>
-                        ))
-                      }
+                      {(suggestedSkills || []).length > 0 ? (
+                        (suggestedSkills || [])
+                          .filter(skill => !extractedSkills.includes(skill) && !categorizedSkills.all_skills.includes(skill))
+                          .map((skill) => (
+                            <Badge
+                              key={skill}
+                              variant={selectedSkills.includes(skill) ? "default" : "secondary"}
+                              className="cursor-pointer flex items-center gap-1"
+                              onClick={() => handleSkillToggle(skill)}
+                            >
+                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {skill}
+                            </Badge>
+                          ))
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          No additional skill suggestions available. Try uploading a document with more content.
+                        </div>
+                      )}
                     </div>
                   </div>
 

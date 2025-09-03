@@ -39,7 +39,7 @@ export interface DocumentProcessingResult {
 
 export class DocumentProcessor {
   /**
-   * Process a PDF file using Flask API for advanced extraction
+   * Process a PDF file using FastAPI for advanced extraction
    */
   static async processPDF(file: File): Promise<DocumentProcessingResult> {
     const startTime = Date.now();
@@ -58,7 +58,7 @@ export class DocumentProcessor {
         }
       };
     } catch (apiError) {
-      console.warn('Flask API not available, using fallback PDF processing:', apiError);
+      console.warn('FastAPI service not available, using fallback PDF processing:', apiError);
       
       // Fallback to basic PDF processing if API is not available
       const text = `[PDF Document: ${file.name}]\n\nThis PDF requires server-side processing for full text extraction. Please ensure the document processing API is running.\n\nFile: ${file.name}\nSize: ${(file.size / 1024).toFixed(1)} KB\nType: ${file.type}`;
@@ -108,7 +108,23 @@ export class DocumentProcessor {
     const startTime = Date.now();
     
     try {
-      const zip = await JSZip.loadAsync(file);
+      // Use a safer approach to load the file
+      let zipData;
+      try {
+        zipData = await this.readFileAsArrayBuffer(file);
+      } catch (readError) {
+        console.error('Error reading file:', readError);
+        throw new Error('Unable to read PPTX file data');
+      }
+      
+      let zip;
+      try {
+        zip = await JSZip.loadAsync(zipData);
+      } catch (zipError) {
+        console.error('Error loading zip:', zipError);
+        throw new Error('Invalid PPTX file format');
+      }
+      
       const slides: string[] = [];
       let slideCount = 0;
       
@@ -116,10 +132,15 @@ export class DocumentProcessor {
       for (const filename in zip.files) {
         if (filename.startsWith('ppt/slides/slide') && filename.endsWith('.xml')) {
           slideCount++;
-          const slideXml = await zip.files[filename].async('string');
-          const slideText = await this.extractTextFromSlideXml(slideXml);
-          if (slideText.trim()) {
-            slides.push(slideText.trim());
+          try {
+            const slideXml = await zip.files[filename].async('string');
+            const slideText = await this.extractTextFromSlideXml(slideXml);
+            if (slideText.trim()) {
+              slides.push(slideText.trim());
+            }
+          } catch (slideError) {
+            console.warn(`Error extracting text from slide ${filename}:`, slideError);
+            // Continue with other slides instead of failing completely
           }
         }
       }
@@ -127,18 +148,26 @@ export class DocumentProcessor {
       // Also extract from slide notes if available
       for (const filename in zip.files) {
         if (filename.startsWith('ppt/notesSlides/notesSlide') && filename.endsWith('.xml')) {
-          const notesXml = await zip.files[filename].async('string');
-          const notesText = await this.extractTextFromSlideXml(notesXml);
-          if (notesText.trim()) {
-            slides.push(`Notes: ${notesText.trim()}`);
+          try {
+            const notesXml = await zip.files[filename].async('string');
+            const notesText = await this.extractTextFromSlideXml(notesXml);
+            if (notesText.trim()) {
+              slides.push(`Notes: ${notesText.trim()}`);
+            }
+          } catch (notesError) {
+            console.warn(`Error extracting notes from ${filename}:`, notesError);
+            // Continue with other notes
           }
         }
       }
       
       const combinedText = slides.join('\n\n');
       
+      // Clean up any references to avoid memory leaks
+      zip = null;
+      
       return {
-        text: combinedText,
+        text: combinedText || '[No text content found in the PPTX file]',
         metadata: {
           slideCount,
           wordCount: combinedText.split(/\s+/).length,
@@ -147,6 +176,7 @@ export class DocumentProcessor {
         }
       };
     } catch (error) {
+      console.error('PPTX processing error:', error);
       throw new Error(`Failed to process PPTX: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -156,7 +186,14 @@ export class DocumentProcessor {
    */
   private static async extractTextFromSlideXml(xml: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      parseString(xml, (err, result) => {
+      // Add timeout to prevent hanging on malformed XML
+      const timeoutId = setTimeout(() => {
+        reject(new Error('XML parsing timed out'));
+      }, 5000); // 5 second timeout
+      
+      parseString(xml, { trim: true, explicitArray: false }, (err, result) => {
+        clearTimeout(timeoutId);
+        
         if (err) {
           reject(err);
           return;
@@ -164,37 +201,59 @@ export class DocumentProcessor {
         
         const textElements: string[] = [];
         
-        // Recursively extract text from XML nodes
-        const extractText = (obj: any) => {
-          if (typeof obj === 'string') {
-            textElements.push(obj);
-          } else if (Array.isArray(obj)) {
-            obj.forEach(extractText);
-          } else if (obj && typeof obj === 'object') {
-            // Look for text nodes (a:t elements in PowerPoint XML)
-            if (obj['a:t']) {
-              if (Array.isArray(obj['a:t'])) {
-                obj['a:t'].forEach((t: any) => {
-                  if (typeof t === 'string') {
-                    textElements.push(t);
-                  } else if (t._) {
-                    textElements.push(t._);
-                  }
-                });
-              } else if (typeof obj['a:t'] === 'string') {
-                textElements.push(obj['a:t']);
-              } else if (obj['a:t']._) {
-                textElements.push(obj['a:t']._);
-              }
+        try {
+          // Safer recursive function with recursion limit and path tracking
+          const extractText = (obj: any, depth = 0, path = '') => {
+            // Prevent excessive recursion
+            if (depth > 100) {
+              console.warn(`Excessive recursion depth at path: ${path}`);
+              return;
             }
             
-            // Recursively process other properties
-            Object.values(obj).forEach(extractText);
-          }
-        };
-        
-        extractText(result);
-        resolve(textElements.join(' '));
+            if (obj === null || obj === undefined) {
+              return;
+            }
+            
+            if (typeof obj === 'string') {
+              textElements.push(obj);
+            } else if (Array.isArray(obj)) {
+              for (let i = 0; i < obj.length; i++) {
+                extractText(obj[i], depth + 1, `${path}[${i}]`);
+              }
+            } else if (typeof obj === 'object') {
+              // Look for text nodes (a:t elements in PowerPoint XML)
+              if (obj['a:t']) {
+                if (Array.isArray(obj['a:t'])) {
+                  for (let i = 0; i < obj['a:t'].length; i++) {
+                    const t = obj['a:t'][i];
+                    if (typeof t === 'string') {
+                      textElements.push(t);
+                    } else if (t && t._) {
+                      textElements.push(t._);
+                    }
+                  }
+                } else if (typeof obj['a:t'] === 'string') {
+                  textElements.push(obj['a:t']);
+                } else if (obj['a:t'] && obj['a:t']._) {
+                  textElements.push(obj['a:t']._);
+                }
+              }
+              
+              // Recursively process other properties, but avoid circular structures
+              for (const key in obj) {
+                if (obj.hasOwnProperty(key) && key !== '_parent' && key !== '_parentNode') {
+                  extractText(obj[key], depth + 1, `${path}.${key}`);
+                }
+              }
+            }
+          };
+          
+          extractText(result);
+          resolve(textElements.join(' ').replace(/\s+/g, ' ').trim());
+        } catch (extractError) {
+          console.error('Error extracting text from XML:', extractError);
+          resolve(''); // Return empty string on error, don't fail the whole process
+        }
       });
     });
   }
@@ -441,7 +500,7 @@ export class DocumentProcessor {
   }
 
   /**
-   * Process document with full analysis using Flask API (skills, summary, etc.)
+   * Process document with full analysis using FastAPI (skills, summary, etc.)
    */
   static async processDocumentWithAPI(file: File): Promise<{
     text: string;
@@ -457,8 +516,11 @@ export class DocumentProcessor {
     };
     summary: string;
     metadata: any;
+    suggestedSkills?: string[];
+    generatedTitle?: string;
+    generatedDescription?: string;
   }> {
-    const API_URL = 'http://localhost:5001';
+    const API_URL = 'http://localhost:3000';
     
     try {
       const formData = new FormData();
@@ -488,10 +550,12 @@ export class DocumentProcessor {
           all_skills: result.skills || []
         },
         summary: result.summary || '',
-        metadata: result.metadata || {}
+        metadata: result.metadata || {},
+        generatedTitle: result.generated_title || '',
+        generatedDescription: result.generated_description || ''
       };
     } catch (error) {
-      console.error('Flask API error:', error);
+      console.error('FastAPI service error:', error);
       
       // Fallback to local processing
       const localResult = await this.processDocument(file);
@@ -514,6 +578,29 @@ export class DocumentProcessor {
         metadata: localResult.metadata
       };
     }
+  }
+
+  /**
+   * Helper method to safely read a file as ArrayBuffer
+   */
+  private static readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        if (event.target?.result instanceof ArrayBuffer) {
+          resolve(event.target.result);
+        } else {
+          reject(new Error('Failed to read file as ArrayBuffer'));
+        }
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('Error reading file'));
+      };
+      
+      reader.readAsArrayBuffer(file);
+    });
   }
 }
 

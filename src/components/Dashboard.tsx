@@ -170,7 +170,7 @@ export const Dashboard = () => {
       <div className="container mx-auto px-6 py-8">
         {/* Main modules grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          {/* Network Mapper */}
+          {/* Connection Insights */}
           <Card className="shadow-card border-border hover:shadow-glow transition-all duration-300">
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -178,14 +178,14 @@ export const Dashboard = () => {
                   <Network className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Network Mapper</CardTitle>
+                  <CardTitle>Connection Insights</CardTitle>
                   <CardDescription>Find your best connectors</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Total Contacts</span>
+                <span className="text-sm text-muted-foreground">Total Connections</span>
                 <Badge variant="secondary">1,247</Badge>
               </div>
               <div className="flex items-center justify-between">
@@ -224,8 +224,8 @@ export const Dashboard = () => {
                   <FileText className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Portfolio Builder</CardTitle>
-                  <CardDescription>Create evidence cards</CardDescription>
+                  <CardTitle>Showcase Library</CardTitle>
+                  <CardDescription>Create porfolio cards</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -399,9 +399,19 @@ export const Dashboard = () => {
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
                             <IconComponent className="w-4 h-4 text-muted-foreground" />
-                            <Badge variant="outline" className="text-xs">
-                              {item.type}
-                            </Badge>
+                            
+                              <a 
+                                href={item.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                title={`Open ${item.type} resource`}
+                              >
+                                <Badge variant="outline" className="text-xs flex items-center gap-1 hover:bg-secondary cursor-pointer">
+                                  {item.type}
+                                  <LinkIcon className="w-3 h-3 ml-1" />
+                                </Badge>
+                              </a>
+                         
                           </div>
                           <Button
                             variant="ghost"
@@ -421,7 +431,7 @@ export const Dashboard = () => {
                           {item.summary}
                         </p>
                         
-                        {item.url && (
+                        {/* {item.url && (
                           <div className="mb-3">
                             <a 
                               href={item.url} 
@@ -433,7 +443,7 @@ export const Dashboard = () => {
                               {item.url}
                             </a>
                           </div>
-                        )}
+                        )} */}
                         
                         <div className="flex flex-wrap gap-1 mb-3">
                           {(() => {

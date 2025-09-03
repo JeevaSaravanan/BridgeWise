@@ -103,7 +103,7 @@ class GitHubAnalyzer:
         self.headers = {"Authorization": f"token {token}"} if token else {}
         
         # Azure OpenAI configuration
-        self.azure_openai_endpoint = "https://open-ai-res.openai.azure.com"
+        self.azure_openai_endpoint = "https://open-ai-res.openai.azure.com/"
         self.azure_openai_key = os.getenv("AZURE_OPENAI_KEY")
         self.azure_openai_deployment = "gpt-4o-mini"
         self.azure_openai_api_version = "2025-01-01-preview"
