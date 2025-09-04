@@ -747,15 +747,23 @@ Respond with ONLY the description text, nothing else.
 # -----------------------------------------------------------------------------
 # FastAPI app & lifespan
 # -----------------------------------------------------------------------------
-origins = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "http://localhost:8080",
-    "http://localhost:8081",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8080",
-    "http://127.0.0.1:8081",
-]
+# For development, allow all origins
+origins = ["*"]
+
+# Alternatively, for more restrictive but still development-friendly:
+# origins = [
+#     "http://localhost:5173",
+#     "http://localhost:3000", 
+#     "http://localhost:8080",
+#     "http://localhost:8081",
+#     "http://127.0.0.1:5173",
+#     "http://127.0.0.1:8080",
+#     "http://127.0.0.1:8081",
+#     # Adding more common development ports
+#     "http://localhost:5174",
+#     "http://localhost:4173",
+#     "http://localhost:4174",
+# ]
 
 
 @asynccontextmanager
@@ -783,12 +791,18 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 
 # -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
+
+@app.get("/health")
+def health_check():
+    """Simple endpoint to check if the API is up and running."""
+    return {"status": "ok", "timestamp": time.time()}
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "document-processor-api"}
@@ -979,6 +993,129 @@ async def generate_metadata(file: UploadFile = File(...)):
                 os.remove(file_path)
         except Exception:
             pass
+
+
+@app.post("/rephrase-message", response_model=Dict)
+@app.post("/rephrase-message/", response_model=Dict)  # Added endpoint with trailing slash
+async def rephrase_message(request_data: Dict):
+    """
+    Rephrase a generated message to make it more coherent and smooth using Azure OpenAI.
+    
+    Parameters:
+    - message: The original message to rephrase
+    - goal: The goal of the outreach (for context)
+    - connector_info: Information about the connector (for context)
+    - portfolio_info: Information about attached portfolio items (for context)
+    
+    Returns:
+    - rephrased_message: The improved message
+    """
+    start_time = time.time()
+    
+    try:
+        message = request_data.get("message", "")
+        goal = request_data.get("goal", "")
+        connector_info = request_data.get("connector_info", {})
+        portfolio_info = request_data.get("portfolio_info", [])
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="No message provided")
+            
+        dp: DocumentProcessor = app.state.doc_processor
+        
+        # Check if Azure OpenAI client is available
+        if not dp.azure_client:
+            logger.warning("Azure OpenAI client not available for rephrasing")
+            return JSONResponse(content={"rephrased_message": message})
+        
+        try:
+            # Create a prompt for the rephrasing task
+            connector_context = f"Person's name: {connector_info.get('name', 'N/A')}\n"
+            connector_context += f"Person's title: {connector_info.get('title', 'N/A')}\n"
+            connector_context += f"Person's company: {connector_info.get('company', 'N/A')}\n"
+            connector_context += f"Person's industry/cluster: {connector_info.get('cluster', 'N/A')}\n"
+            
+            portfolio_context = ""
+            for i, item in enumerate(portfolio_info):
+                portfolio_context += f"Item {i+1}: {item.get('title', 'N/A')} - {item.get('summary', 'N/A')[:100]}\n"
+            
+            prompt = f"""
+You are a professional communication coach helping to refine an outreach message.
+
+The user has created a message for professional networking with the goal of: "{goal}"
+
+The message is being sent to a connection with the following details:
+{connector_context}
+
+The user has attached these portfolio items:
+{portfolio_context}
+
+Original message:
+{message}
+
+Please rephrase this message to be more:
+1. Coherent and smooth-flowing
+2. Professional and concise
+3. Engaging and personalized
+4. Natural and conversational
+
+Guidelines:
+- Keep the same structure and key points
+- Maintain all important information and portfolio items
+- Improve transitions between sections
+- Enhance clarity and impact
+- Keep a friendly yet professional tone
+- Do not add new information not in the original message
+- Keep the [Your Name] placeholder
+
+Respond with ONLY the improved message, no additional explanation or formatting.
+"""
+
+            # For debugging, log info about the Azure OpenAI setup
+            logger.info(
+                "Azure OpenAI request: deployment=%s, temperature=0.4, max_tokens=800",
+                dp.azure_openai_deployment
+            )
+            
+            try:
+                response = dp.azure_client.chat.completions.create(
+                    model=dp.azure_openai_deployment,
+                    messages=[
+                        {
+                            "role": "system", 
+                            "content": "You are a professional communication coach who excels at improving professional networking messages."
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.4,
+                    max_tokens=800
+                )
+            except Exception as api_error:
+                logger.error("Azure OpenAI API call failed: %s", api_error)
+                # Return the original message if the API call fails
+                return JSONResponse(content={"rephrased_message": message, "error": str(api_error)})
+            
+            if getattr(response, "choices", None) and len(response.choices) > 0 and response.choices[0].message.content:
+                rephrased_message = response.choices[0].message.content.strip()
+                processing_time = int((time.time() - start_time) * 1000)
+                logger.info("Message successfully rephrased in %d ms", processing_time)
+                return JSONResponse(content={
+                    "rephrased_message": rephrased_message,
+                    "processing_time": processing_time,
+                })
+            else:
+                logger.warning("No valid response from Azure OpenAI for message rephrasing")
+                return JSONResponse(content={"rephrased_message": message, "status": "fallback_used"})
+                
+        except Exception as e:
+            logger.error("Error rephrasing message with Azure OpenAI: %s", e)
+            return JSONResponse(content={"rephrased_message": message, "error": str(e)})
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Message rephrasing failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Message rephrasing failed: {str(e)}")
 
 
 # -----------------------------------------------------------------------------
