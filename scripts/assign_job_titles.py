@@ -53,7 +53,7 @@ from dotenv import load_dotenv  # type: ignore
 
 load_dotenv()
 
-DATA_PATH = Path("data/enriched_people.json")
+DATA_PATH = Path("../data/enriched_people.json")
 
 DATE_RANGE_PATTERN = re.compile(r"^(?P<start>[^\u2013\u2014\u2012\u2010-]+)\s*[\u2013\u2014\u2012\u2010-]\s*(?P<end>.+)$")
 YEAR_ONLY = re.compile(r"^(\d{4})")

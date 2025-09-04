@@ -5,8 +5,8 @@ from neo4j import GraphDatabase
 from dotenv import load_dotenv
 load_dotenv()
 
-ME_PATH = Path("data/enriched_me.json")
-PEOPLE_PATH = Path("data/enriched_people.json")
+ME_PATH = Path("../data/enriched_me.json")
+PEOPLE_PATH = Path("../data/enriched_people.json")
 
 URI  = os.getenv("NEO4J_URI")
 USER = os.getenv("NEO4J_USER", "neo4j")

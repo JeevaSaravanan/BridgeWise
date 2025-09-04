@@ -120,8 +120,7 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Goal & Progress */}
-          <Card>
+          {/* <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Analysis for: {selectedGoal}</CardTitle>
               <CardDescription>Finding your best connectors based on similarity and bridge scores</CardDescription>
@@ -135,7 +134,7 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
                 <Progress value={analysisProgress} className="h-2" />
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           {/* Network Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

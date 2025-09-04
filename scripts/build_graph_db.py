@@ -163,7 +163,7 @@ def load_graph(records: List[Dict[str, Any]]):
 
 
 def main():
-    data_path = Path("data/enriched_people.json")
+    data_path = Path("../data/enriched_people.json")
     if not data_path.exists():
         raise FileNotFoundError(
             f"Could not find {data_path}. Make sure the enriched data file exists."

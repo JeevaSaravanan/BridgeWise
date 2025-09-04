@@ -7,7 +7,7 @@ load_dotenv()
 from pinecone import Pinecone
 from langchain_openai import AzureOpenAIEmbeddings, OpenAIEmbeddings
 
-ME_PATH = Path("data/enriched_me.json")
+ME_PATH = Path("../data/enriched_me.json")
 INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "bridgewise-profiles")
 
 def get_embedder():
