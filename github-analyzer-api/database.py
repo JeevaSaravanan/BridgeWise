@@ -95,6 +95,7 @@ class DatabaseManager:
                     skills,
                     thumbnail,
                     analysis_result,
+                    skill_visibility,
                     created_at,
                     updated_at
                 FROM portfolio_items 
@@ -112,6 +113,9 @@ class DatabaseManager:
                     "thumbnail": row["thumbnail"],
                     "analysisResult": row["analysis_result"] if row["analysis_result"] is None else (
                         row["analysis_result"] if isinstance(row["analysis_result"], dict) else json.loads(row["analysis_result"])
+                    ),
+                    "skillVisibility": {} if row["skill_visibility"] is None else (
+                        row["skill_visibility"] if isinstance(row["skill_visibility"], dict) else json.loads(row["skill_visibility"])
                     ),
                     "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
                     "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None
@@ -160,10 +164,19 @@ class DatabaseManager:
                         }
             item_id = str(uuid.uuid4())
             
+            # Debug logging for skill visibility
+            item_type = item_data["type"]
+            skill_visibility_data = item_data.get("skillVisibility", {})
+            print(f"Creating portfolio item type: {item_type}")
+            print(f"skill_visibility data: {skill_visibility_data}")
+            if item_type in ['file', 'github'] and (not skill_visibility_data or len(skill_visibility_data) == 0):
+                print("WARNING: Empty skill_visibility for file/github type!")
+                print(f"Item data: {item_data}")
+            
             row = await conn.fetchrow("""
                 INSERT INTO portfolio_items (
-                    id, title, type, url, summary, skills, thumbnail, analysis_result
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    id, title, type, url, summary, skills, thumbnail, analysis_result, skill_visibility
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING 
                     id,
                     title,
@@ -173,6 +186,7 @@ class DatabaseManager:
                     skills,
                     thumbnail,
                     analysis_result,
+                    skill_visibility,
                     created_at,
                     updated_at
             """, 
@@ -183,7 +197,8 @@ class DatabaseManager:
                 item_data["summary"],
                 json.dumps(item_data.get("skills", [])),
                 item_data.get("thumbnail", "📄"),
-                json.dumps(item_data.get("analysisResult")) if item_data.get("analysisResult") else None
+                json.dumps(item_data.get("analysisResult")) if item_data.get("analysisResult") else None,
+                json.dumps(item_data.get("skillVisibility", {})) # New field for skill visibility
             )
             
             return {
@@ -195,6 +210,7 @@ class DatabaseManager:
                 "skills": json.loads(row["skills"]) if row["skills"] else [],
                 "thumbnail": row["thumbnail"],
                 "analysisResult": json.loads(row["analysis_result"]) if row["analysis_result"] else None,
+                "skillVisibility": json.loads(row["skill_visibility"]) if row["skill_visibility"] else {},
                 "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
                 "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None
             }
@@ -232,6 +248,11 @@ class DatabaseManager:
                 values.append(json.dumps(updates["analysisResult"]) if updates["analysisResult"] else None)
                 param_count += 1
 
+            if "skillVisibility" in updates:
+                set_clauses.append(f"skill_visibility = ${param_count}")
+                values.append(json.dumps(updates["skillVisibility"]))
+                param_count += 1
+
             if not set_clauses:
                 raise ValueError("No valid updates provided")
 
@@ -251,6 +272,7 @@ class DatabaseManager:
                     skills,
                     thumbnail,
                     analysis_result,
+                    skill_visibility,
                     created_at,
                     updated_at
             """
@@ -269,6 +291,7 @@ class DatabaseManager:
                 "skills": json.loads(row["skills"]) if row["skills"] else [],
                 "thumbnail": row["thumbnail"],
                 "analysisResult": json.loads(row["analysis_result"]) if row["analysis_result"] else None,
+                "skillVisibility": json.loads(row["skill_visibility"]) if row["skill_visibility"] else {},
                 "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
                 "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None
             }
@@ -324,6 +347,7 @@ class DatabaseManager:
                     skills,
                     thumbnail,
                     analysis_result,
+                    skill_visibility,
                     created_at,
                     updated_at
                 FROM portfolio_items 
@@ -344,6 +368,7 @@ class DatabaseManager:
                     "skills": json.loads(row["skills"]) if row["skills"] else [],
                     "thumbnail": row["thumbnail"],
                     "analysisResult": json.loads(row["analysis_result"]) if row["analysis_result"] else None,
+                    "skillVisibility": json.loads(row["skill_visibility"]) if row["skill_visibility"] else {},
                     "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
                     "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None
                 }

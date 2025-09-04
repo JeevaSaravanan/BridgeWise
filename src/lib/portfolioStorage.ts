@@ -19,6 +19,7 @@ export interface PortfolioItem {
   summary: string;
   description?: string;  // Add description field
   skills: string[];
+  skillVisibility?: Record<string, boolean>; // New field for skill visibility
   categorizedSkills?: {
     technical_skills: string[];
     soft_skills: string[];
@@ -122,6 +123,30 @@ class PortfolioStorageClass {
   async getPortfolioAsync(): Promise<PortfolioItem[]> {
     try {
       const items = await this.apiCall('/portfolio');
+      
+      // Log items with skill visibility details
+      console.log('Portfolio items loaded from API:', items.length);
+      
+      items.forEach((item: PortfolioItem) => {
+        console.log(`Item: ${item.title} (${item.type}) - Skill visibility status:`);
+        console.log('  Has skillVisibility field:', item.skillVisibility !== undefined);
+        
+        if (item.type === 'file' || item.type === 'github') {
+          console.log('  Expected to have skill visibility (file/github type)');
+          console.log('  skillVisibility data:', item.skillVisibility);
+          
+          // Check if skill_visibility is empty but skills exist
+          if (item.skills?.length > 0 && 
+              (!item.skillVisibility || Object.keys(item.skillVisibility).length === 0)) {
+            console.warn('⚠️ Item has skills but empty skill_visibility!', {
+              id: item.id,
+              type: item.type,
+              skillCount: item.skills.length
+            });
+          }
+        }
+      });
+      
       // Update local cache
       this.saveLocalPortfolio(items);
       return items;
@@ -372,22 +397,85 @@ class PortfolioStorageClass {
   }
 
   private transformItemForApi(item: Omit<PortfolioItem, 'id'>): any {
+    console.log('Transforming portfolio item for API:', {
+      title: item.title,
+      type: item.type,
+      skills: item.skills,
+      skillVisibility: item.skillVisibility,
+      categorizedSkills: item.categorizedSkills
+    });
+    
+    // Log the skillVisibility status
+    if (item.type === 'file' || item.type === 'github') {
+      console.log('Including skill_visibility for file/github type:', item.skillVisibility);
+    } else {
+      console.log('Skill visibility not applicable for type:', item.type);
+    }
+    
     // Transform the item to match backend PortfolioItemCreate model
     const apiItem: any = {
       title: item.title,
       type: item.type,
       summary: item.summary,
-      skills: item.skills || [],
-      thumbnail: item.thumbnail || "📄"
+      skills: item.skills || [], // For UI display - visible skills only
+      thumbnail: item.thumbnail || "📄",
+      description: item.description
     };
+    
+    // Always ensure skillVisibility is properly set
+    if (item.type === 'file' || item.type === 'github') {
+      // For file/github types, make sure skillVisibility is always a valid object with entries for all skills
+      const skillVisibility: Record<string, boolean> = {};
+      
+      // Initialize all skills to true by default
+      if (item.skills && Array.isArray(item.skills)) {
+        item.skills.forEach(skill => {
+          // Use provided value or default to true
+          skillVisibility[skill] = 
+            item.skillVisibility && item.skillVisibility[skill] !== undefined 
+              ? item.skillVisibility[skill] 
+              : true;
+        });
+      }
+      
+      // Also check if we have additional skills in the visibility map that aren't in the skills array
+      if (item.skillVisibility) {
+        Object.keys(item.skillVisibility).forEach(skill => {
+          if (skillVisibility[skill] === undefined) {
+            skillVisibility[skill] = item.skillVisibility![skill];
+          }
+        });
+      }
+      
+      apiItem.skillVisibility = skillVisibility;
+      console.log('Final skillVisibility for API:', apiItem.skillVisibility, 
+                  'with', Object.keys(apiItem.skillVisibility).length, 'entries');
+    } else {
+      // For URL type, use empty object
+      apiItem.skillVisibility = {};
+    }
 
     // Only include url if it's not undefined
     if (item.url !== undefined) {
       apiItem.url = item.url;
     }
+    
+    // Include categorizedSkills if available
+    if (item.categorizedSkills) {
+      apiItem.categorizedSkills = item.categorizedSkills;
+    }
 
     // Transform analysisResult if it exists
     if (item.analysisResult) {
+      // Make sure the analysis result is properly filtered to match selected skills
+      if (item.analysisResult.extracted_skills) {
+        console.log('Analysis result extracted skills:', item.analysisResult.extracted_skills);
+        // These should match the skills array
+        if (item.analysisResult.extracted_skills.length !== item.skills.length) {
+          console.warn('Mismatch between extracted_skills and selected skills!');
+        }
+      }
+      
       // Always store the full analysis result as-is
       // The backend JSONB field can handle any structure
       apiItem.analysisResult = item.analysisResult;

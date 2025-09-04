@@ -30,7 +30,9 @@ import {
   Database,
   Wrench,
   Globe,
-  Link
+  Link,
+  Info,
+  Circle
 } from "lucide-react";
 
 interface PortfolioBuilderModalProps {
@@ -67,6 +69,8 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
     all_skills: []
   });
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  // Map for skill visibility - default all skills to visible (true)
+  const [skillVisibility, setSkillVisibility] = useState<Record<string, boolean>>({}); 
   const [processingProgress, setProcessingProgress] = useState(0);
   const [generatedSummary, setGeneratedSummary] = useState("");
   const [processingMessage, setProcessingMessage] = useState("");
@@ -438,6 +442,14 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
             
             setExtractedSkills(skills);
             setSelectedSkills(skills); // Auto-select all extracted skills
+            
+            // Initialize skill visibility map
+            const initialVisibility: Record<string, boolean> = {};
+            skills.forEach(skill => {
+              initialVisibility[skill] = true; // All skills visible by default
+            });
+            setSkillVisibility(initialVisibility);
+            
             setGeneratedSummary(summary);
             
             // Auto-generate title and description for URL
@@ -458,6 +470,14 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
             const skills = ['React', 'TypeScript', 'API Design', 'Project Management'];
             setExtractedSkills(skills);
             setSelectedSkills(skills); // Auto-select all extracted skills
+            
+            // Initialize skill visibility map
+            const initialVisibility: Record<string, boolean> = {};
+            skills.forEach(skill => {
+              initialVisibility[skill] = true; // All skills visible by default
+            });
+            setSkillVisibility(initialVisibility);
+            
             setGeneratedSummary("A comprehensive analytics dashboard built with React and TypeScript, featuring real-time data visualization, user authentication, and RESTful API integration. Demonstrates strong frontend development skills and modern web technologies.");
             return 100;
           }
@@ -468,15 +488,104 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
   };
 
   const handleSkillToggle = (skill: string) => {
-    setSelectedSkills(prev => 
-      prev.includes(skill) 
+    // Only apply skill visibility toggling for file and github types
+    if (selectedType !== 'file' && selectedType !== 'github') {
+      console.log(`Skill toggling not applicable for type: ${selectedType}`);
+      return;
+    }
+    
+    console.log(`Toggling skill: ${skill} for type: ${selectedType}`);
+    
+    // Update selected skills array for backward compatibility
+    setSelectedSkills(prev => {
+      const newSkills = prev.includes(skill) 
         ? prev.filter(s => s !== skill)
-        : [...prev, skill]
-    );
+        : [...prev, skill];
+      console.log('Updated selectedSkills:', newSkills);
+      return newSkills;
+    });
+    
+    // Update the visibility map
+    setSkillVisibility(prev => {
+      // CRITICAL: Make sure we have a default map if none exists
+      const existingMap = {...prev};
+      
+      // If the skill doesn't exist in the map yet, assume it was visible (true)
+      const currentVisibility = existingMap[skill] !== undefined ? existingMap[skill] : true;
+      
+      // Update the map with the toggled value
+      existingMap[skill] = !currentVisibility;
+      
+      console.log(`Toggling skill "${skill}" from ${currentVisibility} to ${!currentVisibility}`);
+      console.log('Updated skill visibility map:', existingMap);
+      
+      // Check if any skills don't have an entry in the map
+      extractedSkills.forEach(s => {
+        if (existingMap[s] === undefined) {
+          console.log(`Adding missing skill ${s} to visibility map with default true`);
+          existingMap[s] = true;
+        }
+      });
+      
+      return existingMap;
+    });
   };
 
   const handleCreate = async () => {
     try {
+      console.log('Creating portfolio item with skill visibility map:', skillVisibility);
+      
+      // Get all skills (both visible and hidden)
+      const allExtractedSkills = [...extractedSkills];
+      if (suggestedSkills) {
+        suggestedSkills.forEach(skill => {
+          if (!allExtractedSkills.includes(skill)) {
+            allExtractedSkills.push(skill);
+          }
+        });
+      }
+      
+      // For backward compatibility, still maintain the selectedSkills array
+      // This will eventually be used just for UI state
+      
+      // Clone and keep all skills in the analysis result, but mark their visibility
+      let cleanedAnalysisResult = analysisResult ? JSON.parse(JSON.stringify(analysisResult)) : undefined;
+      
+      // If we have an analysis result, update it with full skill information
+      if (cleanedAnalysisResult) {
+        // Keep all extracted skills but include visibility information
+        cleanedAnalysisResult.extracted_skills = allExtractedSkills;
+        cleanedAnalysisResult.skill_visibility = skillVisibility;
+        
+        // Keep all skills in categories but mark their visibility status
+        if (cleanedAnalysisResult.categorized_skills) {
+          // Create full versions of each skill category with visibility info
+          Object.keys(cleanedAnalysisResult.categorized_skills).forEach(category => {
+            if (category === 'all_skills') {
+              cleanedAnalysisResult.categorized_skills[category] = allExtractedSkills;
+            }
+            // Keep all skills in each category
+          });
+          
+          console.log('All skills with visibility map:', cleanedAnalysisResult.skill_visibility);
+        }
+      }
+      
+      // Initialize skill visibility map for all skills (force true for all by default)
+      const finalSkillVisibility: Record<string, boolean> = {};
+      
+      // Include ALL skills in the visibility map and always initialize to true if not already set
+      [...extractedSkills, ...(suggestedSkills || [])].forEach(skill => {
+        // If skill exists in current map, keep that value, otherwise set to true
+        finalSkillVisibility[skill] = skillVisibility[skill] !== undefined ? skillVisibility[skill] : true;
+      });
+      
+      console.log('Final skill visibility map before saving:', finalSkillVisibility, 'for type:', selectedType);
+      console.log('Skills count:', extractedSkills.length, 'Skill visibility map entries:', Object.keys(finalSkillVisibility).length);
+      
+      // Get the currently visible skills for UI display
+      const visibleSkills = Object.keys(finalSkillVisibility).filter(skill => finalSkillVisibility[skill]);
+      
       const newPortfolioItem: PortfolioItem = {
         id: crypto.randomUUID(),
         title,
@@ -484,10 +593,11 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
         url: selectedType === 'url' || selectedType === 'github' ? url : undefined,
         summary: generatedSummary,
         description: description,  // Include description field
-        skills: selectedSkills,
+        skills: visibleSkills, // For backward compatibility - only visible skills
+        skillVisibility: finalSkillVisibility, // Store full map of skill visibility
         categorizedSkills: categorizedSkills,
         thumbnail: selectedType === 'github' ? '💻' : selectedType === 'file' ? '📄' : '🔗',
-        analysisResult: analysisResult, // Include full analysis result for GitHub repos
+        analysisResult: cleanedAnalysisResult, // Use the updated version with all skills
         fileName: selectedFile?.name,
         extractedText: extractedText,
         metadata: analysisResult?.metadata || {},
@@ -497,22 +607,42 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
 
       // Save to database
       await portfolioStorage.init();
-      const savedItem = await portfolioStorage.addPortfolioItem({
+      // Only include skill visibility for file and github types
+      const payload: Omit<PortfolioItem, "id"> = {
         title,
         type: selectedType,
         url: selectedType === 'url' || selectedType === 'github' ? url : undefined,
         summary: generatedSummary,
         description: description,  // Include description field
-        skills: selectedSkills,
+        skills: visibleSkills, // For backward compatibility - only visible skills
         categorizedSkills: categorizedSkills,
         thumbnail: selectedType === 'github' ? '💻' : selectedType === 'file' ? '📄' : '🔗',
-        analysisResult: analysisResult,
+        analysisResult: cleanedAnalysisResult, // Use the updated version with all skills
         fileName: selectedFile?.name,
         extractedText: extractedText,
         metadata: analysisResult?.metadata || {},
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
+      };
+      
+      // Always initialize skillVisibility to ensure it's not undefined
+      if (selectedType === 'file' || selectedType === 'github') {
+        // Make absolutely sure every skill has a visibility entry
+        const completeSkillVisibility: Record<string, boolean> = {};
+        // Force set true/false values for every skill based on finalSkillVisibility
+        [...extractedSkills, ...(suggestedSkills || [])].forEach(skill => {
+          completeSkillVisibility[skill] = finalSkillVisibility[skill] !== undefined ? finalSkillVisibility[skill] : true;
+        });
+        
+        payload.skillVisibility = completeSkillVisibility;
+        console.log(`Adding skill visibility for ${selectedType} type with ${Object.keys(completeSkillVisibility).length} skills:`, 
+          completeSkillVisibility);
+      } else {
+        payload.skillVisibility = {}; // Empty for URL type
+        console.log(`Skipping skill visibility for ${selectedType} type - using empty map`);
+      }
+      
+      const savedItem = await portfolioStorage.addPortfolioItem(payload);
       
       console.log('Portfolio item saved to database:', savedItem);
       
@@ -539,6 +669,7 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
     setSuggestedSkills([]); // Reset AI-suggested skills
     setAutoFilledTitle(false);
     setAutoFilledDescription(false);
+    setSkillVisibility({}); // Reset skill visibility map
     setCategorizedSkills({
       technical_skills: [],
       soft_skills: [],
@@ -1624,7 +1755,12 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
               {/* AI Summary and Skills Card */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Review & Finalize</CardTitle>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    {selectedType === 'github' && <Github className="w-5 h-5 text-primary" />}
+                    {selectedType === 'url' && <Globe className="w-5 h-5 text-primary" />}
+                    {selectedType === 'file' && <FileText className="w-5 h-5 text-primary" />}
+                    Review & Finalize
+                  </CardTitle>
                   <CardDescription>Review the extracted information and make any adjustments</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1642,8 +1778,21 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium mb-3 block">Extracted Skills by Category</label>
-                    
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-medium">Extracted Skills by Category</label>
+                      <div className="text-xs flex items-center text-muted-foreground">
+                        <Info className="w-3 h-3 mr-1" />
+                        {selectedType === 'file' || selectedType === 'github' ? 
+                          "Click on skills to toggle visibility (all skills are saved)" :
+                          "Skills for web links cannot be toggled"}
+                      </div>
+                      {(selectedType === 'file' || selectedType === 'github') && (
+                        <div className="bg-muted/50 text-xs p-2 rounded mt-1 mb-2">
+                          <span className="font-medium">How to use:</span> Click once on any skill badge to toggle visibility.
+                          Skills with checkmarks will be visible in your portfolio card. All skills are saved in the database.
+                        </div>
+                      )}
+                    </div>
                     {/* Technical Skills */}
                     {categorizedSkills.technical_skills.length > 0 && (
                       <div className="mb-4">
@@ -1655,11 +1804,20 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           {categorizedSkills.technical_skills.map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                              className="cursor-pointer flex items-center gap-1"
-                              onClick={() => handleSkillToggle(skill)}
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "outline"}
+                              className={(selectedType === 'file' || selectedType === 'github') ? 
+                                "cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors" : 
+                                "flex items-center gap-1"}
+                              onClick={(selectedType === 'file' || selectedType === 'github') ? 
+                                () => handleSkillToggle(skill) : undefined}
+                              title={(selectedType === 'file' || selectedType === 'github') ?
+                                ((skillVisibility[skill] === undefined || skillVisibility[skill]) ? 
+                                  "Click to hide skill" : "Click to show skill") :
+                                "Skill visibility toggling only available for files and GitHub repos"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(selectedType === 'file' || selectedType === 'github') && 
+                               (skillVisibility[skill] === undefined || skillVisibility[skill]) && 
+                               <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))}
@@ -1678,11 +1836,20 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           {categorizedSkills.programming_skills.map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                              className="cursor-pointer flex items-center gap-1"
-                              onClick={() => handleSkillToggle(skill)}
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "outline"}
+                              className={(selectedType === 'file' || selectedType === 'github') ? 
+                                "cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors" : 
+                                "flex items-center gap-1"}
+                              onClick={(selectedType === 'file' || selectedType === 'github') ? 
+                                () => handleSkillToggle(skill) : undefined}
+                              title={(selectedType === 'file' || selectedType === 'github') ?
+                                ((skillVisibility[skill] === undefined || skillVisibility[skill]) ? 
+                                  "Click to hide skill" : "Click to show skill") :
+                                "Skill visibility toggling only available for files and GitHub repos"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(selectedType === 'file' || selectedType === 'github') && 
+                               (skillVisibility[skill] === undefined || skillVisibility[skill]) && 
+                               <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))}
@@ -1701,11 +1868,12 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           {categorizedSkills.leadership_skills.map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                              className="cursor-pointer flex items-center gap-1"
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "outline"}
+                              className="cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors"
                               onClick={() => handleSkillToggle(skill)}
+                              title={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "Click to hide skill" : "Click to show skill"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(skillVisibility[skill] === undefined || skillVisibility[skill]) && <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))}
@@ -1724,11 +1892,12 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           {categorizedSkills.research_skills.map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                              className="cursor-pointer flex items-center gap-1"
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "outline"}
+                              className="cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors"
                               onClick={() => handleSkillToggle(skill)}
+                              title={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "Click to hide skill" : "Click to show skill"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(skillVisibility[skill] === undefined || skillVisibility[skill]) && <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))}
@@ -1747,11 +1916,12 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           {categorizedSkills.collaboration_skills.map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                              className="cursor-pointer flex items-center gap-1"
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "outline"}
+                              className="cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors"
                               onClick={() => handleSkillToggle(skill)}
+                              title={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "Click to hide skill" : "Click to show skill"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(skillVisibility[skill] === undefined || skillVisibility[skill]) && <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))}
@@ -1770,11 +1940,12 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           {categorizedSkills.soft_skills.map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                              className="cursor-pointer flex items-center gap-1"
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "outline"}
+                              className="cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors"
                               onClick={() => handleSkillToggle(skill)}
+                              title={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "Click to hide skill" : "Click to show skill"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(skillVisibility[skill] === undefined || skillVisibility[skill]) && <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))}
@@ -1790,11 +1961,12 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           {extractedSkills.map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                              className="cursor-pointer flex items-center gap-1"
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "outline"}
+                              className="cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors"
                               onClick={() => handleSkillToggle(skill)}
+                              title={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "Click to hide skill" : "Click to show skill"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(skillVisibility[skill] === undefined || skillVisibility[skill]) && <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))}
@@ -1810,11 +1982,12 @@ export const PortfolioBuilderModal = ({ open, onClose, onPortfolioCreated }: Por
                           .map((skill) => (
                             <Badge
                               key={skill}
-                              variant={selectedSkills.includes(skill) ? "default" : "secondary"}
-                              className="cursor-pointer flex items-center gap-1"
+                              variant={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "default" : "secondary"}
+                              className="cursor-pointer flex items-center gap-1 hover:bg-secondary/60 transition-colors"
                               onClick={() => handleSkillToggle(skill)}
+                              title={(skillVisibility[skill] === undefined || skillVisibility[skill]) ? "Click to hide skill" : "Click to show skill"}
                             >
-                              {selectedSkills.includes(skill) && <CheckCircle2 className="w-3 h-3" />}
+                              {(skillVisibility[skill] === undefined || skillVisibility[skill]) && <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {skill}
                             </Badge>
                           ))

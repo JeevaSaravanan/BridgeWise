@@ -16,7 +16,8 @@ import {
   Code,
   TrendingUp,
   Users,
-  ExternalLink
+  ExternalLink,
+  CheckCircle2
 } from "lucide-react";
 
 interface PortfolioDetailModalProps {
@@ -27,6 +28,25 @@ interface PortfolioDetailModalProps {
 
 export const PortfolioDetailModal = ({ item, open, onClose }: PortfolioDetailModalProps) => {
   if (!item) return null;
+  
+  // Debug output to check the full structure of the portfolio item
+  console.log('Portfolio Detail Modal - Item:', {
+    id: item.id,
+    title: item.title,
+    type: item.type,
+    skills: item.skills,
+    hasSkillVisibility: !!item.skillVisibility,
+    skillVisibilityEntries: item.skillVisibility ? Object.keys(item.skillVisibility).length : 0,
+    skillVisibility: item.skillVisibility,
+    shouldUseSkillVisibility: item.type === 'file' || item.type === 'github'
+  });
+  
+  // If skillVisibility is missing for file/github types, log an error
+  if ((item.type === 'file' || item.type === 'github') && 
+      (!item.skillVisibility || Object.keys(item.skillVisibility).length === 0)) {
+    console.warn(`⚠️ Portfolio item of type ${item.type} is missing skillVisibility map!`, 
+      {id: item.id, title: item.title, skills: item.skills?.length || 0});
+  }
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -89,7 +109,15 @@ export const PortfolioDetailModal = ({ item, open, onClose }: PortfolioDetailMod
                 )}
 
                 <div>
-                  <h4 className="font-semibold mb-2">Skills & Technologies</h4>
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-semibold">Skills & Technologies</h4>
+                    {item.type === 'file' || item.type === 'github' ? (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-green-500" />
+                        <span>Highlighted skills are visible in your portfolio</span>
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {(() => {
                       // Combine skills from main field and analysis result
@@ -97,11 +125,71 @@ export const PortfolioDetailModal = ({ item, open, onClose }: PortfolioDetailMod
                       const extractedSkills = item.analysisResult?.extracted_skills || [];
                       const allSkills = [...new Set([...mainSkills, ...extractedSkills])]; // Deduplicate
                       
-                      return allSkills.map((skill, index) => (
-                        <Badge key={index} variant="secondary">
-                          {skill}
-                        </Badge>
-                      ));
+                      // Debug log for skill visibility
+                      console.log(`Portfolio Item ${item.id} (${item.type}) skill visibility:`, {
+                        hasSkillVisibility: !!item.skillVisibility,
+                        skillVisibilityEntries: item.skillVisibility ? Object.keys(item.skillVisibility).length : 0,
+                        skillCount: allSkills.length,
+                        skillVisibility: item.skillVisibility
+                      });
+                      
+                      // If skill visibility map is missing but should exist (for file/github), create a default one with all skills visible
+                      let effectiveSkillVisibility: Record<string, boolean> = {};
+                      
+                      // For file and github types, ensure we have a skill visibility map
+                      if (item.type === 'file' || item.type === 'github') {
+                        if (!item.skillVisibility || Object.keys(item.skillVisibility).length === 0) {
+                          console.log('Creating default skill visibility map with all skills visible');
+                          // Create a default map with all skills visible
+                          allSkills.forEach(s => {
+                            effectiveSkillVisibility[s] = true;
+                          });
+                        } else {
+                          // Start with existing map
+                          effectiveSkillVisibility = {...item.skillVisibility};
+                          
+                          // Ensure all skills have an entry in the map (default to visible/true)
+                          allSkills.forEach(s => {
+                            if (effectiveSkillVisibility[s] === undefined) {
+                              console.log(`Adding missing skill ${s} to visibility map with default true`);
+                              effectiveSkillVisibility[s] = true;
+                            }
+                          });
+                        }
+                      }
+                      
+                      return allSkills.map((skill, index) => {
+                        // Check skill visibility - only applied to file and github types
+                        let isVisible = true; // Default visible
+                        
+                        if (item.type === 'file' || item.type === 'github') {
+                          // For file/github types, check the effective visibility map
+                          isVisible = effectiveSkillVisibility[skill] !== false; // Treat undefined as true (visible)
+                        }
+                        
+                        // Add detailed debug for each skill
+                        if (item.type === 'file' || item.type === 'github') {
+                          console.log(`Skill "${skill}" visibility:`, {
+                            skill,
+                            isVisible,
+                            hasRealSkillVisibility: !!item.skillVisibility,
+                            valueInEffectiveMap: effectiveSkillVisibility[skill],
+                            valueInOriginalMap: item.skillVisibility ? item.skillVisibility[skill] : 'map missing'
+                          });
+                        }
+                        
+                        return (
+                          <Badge 
+                            key={index} 
+                            variant={isVisible ? "default" : "outline"}
+                            className={isVisible ? "bg-primary text-white font-medium" : "opacity-60 line-through"}
+                            title={`Skill: ${skill} - Visibility: ${isVisible ? 'Visible' : 'Hidden'}`}
+                          >
+                            {isVisible && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                            {skill}
+                          </Badge>
+                        );
+                      });
                     })()}
                   </div>
                 </div>
