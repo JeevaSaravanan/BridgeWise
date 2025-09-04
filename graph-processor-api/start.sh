@@ -10,4 +10,4 @@ elif [[ -f .env.example ]]; then
 	export $(grep -v '^#' .env.example | xargs -I {} echo {}) 2>/dev/null || true
 fi
 
-uvicorn api:app --host 0.0.0.0 --port 6000 --reload "$@"
+uvicorn app:app --host 0.0.0.0 --port 4000 --reload "$@"

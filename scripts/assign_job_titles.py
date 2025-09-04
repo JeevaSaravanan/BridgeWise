@@ -1,29 +1,42 @@
-"""Assign job titles to existing Person nodes in Neo4j.
+"""Assign job titles to existing Person nodes in Neo4j with tokenization.
 
-Logic per requirement:
-1. Read JSON array from data/enriched_people.json (same file used elsewhere).
-2. For each record decide jobTitle:
-   - If raw.linkedinJobTitle (or top‑level linkedinJobTitle) not empty -> jobTitle.
-   - Else if raw.linkedinPreviousJobTitle not empty -> jobTitle.
-   - Else if still empty:
-       * If raw.linkedinSchoolDateRange indicates an active school period (end date in future) -> "student".
-       * Else -> "unemployed".
-3. Derive canonical + normalized variants:
-   - jobTitleCanon: lowercase stripped basic canonical phrase (remove punctuation except alphanum/space, collapse whitespace).
-   - jobTitleCanonShort: first two words of canon (help grouping) if >=2 words else canon.
-   - jobTitleSnake: snake_case of canon.
-4. Write back to Person node by id (person_id) setting properties:
-      p.jobTitle, p.jobTitleCanon, p.jobTitleCanonShort, p.jobTitleSnake
-   (non‑destructive MERGE semantics: only update these properties, leave others intact).
+This script reads a JSON array from ``data/enriched_people.json`` and assigns job
+titles to ``:Person`` nodes in the Neo4j graph. It extends the original
+implementation by additionally deriving tokenized versions of both the raw job
+title and its canonical form. These tokens are stored on the person as
+``jobTitleTokens`` and ``jobTitleCanonTokens``, respectively. Having tokens
+available in the graph makes it possible to compute Jaccard similarity between
+job titles and natural language queries, which is used by the ranking logic in
+``graph-processor-api/rank_my_connections.py``.
 
-No CLI args; everything configured inside file. Uses environment variables for Neo4j
-credentials consistent with other scripts: NEO4J_URI, NEO4J_USER, NEO4J_PASS.
+Summary of logic:
 
-Safeguards:
- - Skips if person not found (can optionally create, but requirement states node already exists).
- - Prints summary counts at end.
+1. Determine ``jobTitle`` based on available LinkedIn titles:
+   * Prefer the current LinkedIn job title if present.
+   * Fallback to the previous LinkedIn job title.
+   * If neither exists, classify as ``"student"`` if the person is currently
+     studying (detected via ``linkedinSchoolDateRange``), else ``"unemployed"``.
+2. Compute a canonical category from the raw title using a simple set of rules
+   (see ``canonicalize``). The canonical category is stored as
+   ``jobTitleCanon``. Also compute a short version (first two words) and
+   snake-case version for grouping.
+3. Tokenize both the raw job title and its canonical category. Tokens are
+   lowercased and split on spaces and punctuation. These lists are saved on
+   ``:Person`` as ``jobTitleTokens`` and ``jobTitleCanonTokens``. Tokens
+   support fuzzy matching for ranking purposes.
+4. Write back updates to Neo4j in a single query using UNWIND for batch
+   efficiency. Only the specified properties are overwritten; other
+   properties on the person remain intact.
 
-If you later add synonym grouping you can extend canonicalization.
+Environment variables used for Neo4j connection (must be set before running):
+
+* ``NEO4J_URI``: Bolt URI (e.g., ``bolt://localhost:7687``)
+* ``NEO4J_USER``: Username (default ``neo4j``)
+* ``NEO4J_PASS``: Password
+
+If you adjust or extend the canonicalization logic, you should also consider
+whether the tokenization rules still hold and adjust the regular expression
+accordingly.
 """
 
 from __future__ import annotations
@@ -42,9 +55,36 @@ load_dotenv()
 
 DATA_PATH = Path("data/enriched_people.json")
 
-DATE_RANGE_PATTERN = re.compile(r"^(?P<start>[^–-]+)\s*[–-]\s*(?P<end>.+)$")
+DATE_RANGE_PATTERN = re.compile(r"^(?P<start>[^\u2013\u2014\u2012\u2010-]+)\s*[\u2013\u2014\u2012\u2010-]\s*(?P<end>.+)$")
 YEAR_ONLY = re.compile(r"^(\d{4})")
 YEAR_MONTH = re.compile(r"^(\d{4})-(\d{2})")
+
+# Regular expression for tokenizing job titles. Splits on spaces, tabs,
+# slashes, plus signs, ampersands, hyphens and other punctuation. If you
+# extend tokenization, update this pattern accordingly.
+TOKEN_SPLIT_RE = re.compile(r"[ \t/\+&\-]+")
+
+
+def tokenize_title(s: str) -> List[str]:
+    """Lowercase and split a job title into simple tokens.
+
+    This helper normalizes by lowercasing and splitting on common separators.
+    Empty tokens are filtered out. If the input is empty or None, returns
+    an empty list.
+
+    Args:
+        s: Raw job title or canonical category.
+
+    Returns:
+        List of lowercase tokens.
+    """
+    if not s:
+        return []
+    # Normalize to lowercase and replace slashes with spaces to avoid
+    # slashes splitting different categories incorrectly (e.g., "ml engineer")
+    s = s.lower().replace("/", " ")
+    tokens = [tok for tok in TOKEN_SPLIT_RE.split(s) if tok]
+    return tokens
 
 
 def parse_date_piece(piece: str) -> Optional[datetime]:
@@ -71,7 +111,6 @@ def school_active(school_range: str, today: datetime) -> bool:
     m = DATE_RANGE_PATTERN.match(school_range)
     if not m:
         return False
-    start_raw = m.group("start").strip()
     end_raw = m.group("end").strip()
     end_dt = parse_date_piece(end_raw)
     # If end date missing or 'Present', assume still active.
@@ -89,16 +128,14 @@ WHITESPACE_RE = re.compile(r"\s+")
 # We'll build a dict mapping exact lowercase job title -> canon category.
 DEFAULT_TITLE_SYNONYMS_CAMEL: List[Dict[str, str]] = []  # populated below
 
-# We replicate the titles list minimally by re-reading from enriched_people.json dynamically so
-# we don't duplicate the giant static list; we will fallback if a title not found.
-# However requirement states list already computed; if you prefer static embed you can paste it.
 
 def _load_title_canon_mapping() -> Dict[str, str]:
     """Dynamically build mapping using categorize logic from generate_job_category.
 
-    This avoids maintaining two large hard-coded lists; it derives categories on demand.
+    This avoids maintaining two large hard-coded lists; it derives categories on
+    demand.
     """
-    # Reuse categorize logic (simplified) from generate_job_category.py
+
     def categorize_raw(t: str) -> str:
         base = t.lower().strip()
         if base in {"student", "unemployed"}:
@@ -134,9 +171,9 @@ def _load_title_canon_mapping() -> Dict[str, str]:
         elif any(k in base for k in ["devops", "site reliability engineer", "sre", "system engineer - devops"]):
             cat = "devops/sre"
         elif any(k in base for k in [
-            "software engineer", "sde", "developer", "programmer", "member of technical staff", "mots", "mts", 
-            ".net developer", "full stack", "frontend", "backend", "react developer", "zoho developer", 
-            "solutions engineer", "software qa engineer", "software quality engineer", "software project developer", 
+            "software engineer", "sde", "developer", "programmer", "member of technical staff", "mots", "mts",
+            ".net developer", "full stack", "frontend", "backend", "react developer", "zoho developer",
+            "solutions engineer", "software qa engineer", "software quality engineer", "software project developer",
             "software development engineer", "software engineering manager", "software engineering specialist"
         ]):
             cat = "software engineer"
@@ -184,7 +221,6 @@ def _load_title_canon_mapping() -> Dict[str, str]:
         parts = cat.split("/")
         return "/".join([p.title().replace(" ", "") for p in parts])
 
-    # Build mapping of every distinct title present in JSON dataset
     mapping: Dict[str, str] = {}
     if DATA_PATH.exists():
         try:
@@ -193,7 +229,6 @@ def _load_title_canon_mapping() -> Dict[str, str]:
             if isinstance(data, list):
                 for rec in data:
                     raw = rec.get("raw", {}) if isinstance(rec, dict) else {}
-                    # Titles we might see
                     for candidate in [
                         rec.get("linkedinJobTitle"),
                         raw.get("linkedinJobTitle"),
@@ -207,6 +242,7 @@ def _load_title_canon_mapping() -> Dict[str, str]:
             pass
     return mapping
 
+
 TITLE_CANON_MAP = _load_title_canon_mapping()
 
 
@@ -218,21 +254,18 @@ def canonicalize(title: str) -> Tuple[str, str, str]:
     lower_key = title.lower().strip()
     if lower_key in TITLE_CANON_MAP:
         canon_category = TITLE_CANON_MAP[lower_key]
-        # Build short & snake from category (not raw title) for grouping.
         base = canon_category.replace("/", " ")
-        parts = re.split(r"(?=[A-Z])", base)  # rough split CamelCase
+        parts = re.split(r"(?=[A-Z])", base)
         words = [w for w in re.split(r"\s+", re.sub(r"[^A-Za-z0-9]+", " ", base)) if w]
         short = " ".join(words[:2]) if len(words) >= 2 else (words[0] if words else canon_category)
         snake = re.sub(r"[^a-z0-9]+", "_", canon_category.lower()).strip("_")
         return canon_category, short.lower(), snake
-    # Fallback legacy approach
     t = lower_key
     t = CANON_CLEAN_RE.sub(" ", t)
     t = WHITESPACE_RE.sub(" ", t).strip() or "unknown"
     parts = t.split(" ")
     short = " ".join(parts[:2]) if len(parts) >= 2 else t
     snake = "_".join(parts)
-    # Convert to CamelCase for canon to align with new scheme
     camel = "".join([p.capitalize() for p in parts]) or "Unknown"
     return camel, short, snake
 
@@ -243,7 +276,6 @@ def derive_job_title(rec: Dict[str, Any], today: datetime) -> Tuple[str, str, st
     previous = raw.get("linkedinPreviousJobTitle") or ""
     school_range = raw.get("linkedinSchoolDateRange") or ""
 
-    job_title: str
     if current.strip():
         job_title = current.strip()
     elif previous.strip():
@@ -275,10 +307,20 @@ def get_driver():
     return GraphDatabase.driver(uri, auth=(user, pw))
 
 
-def update_person_titles(driver, updates: List[Tuple[str, str, str, str, str]]):
+def update_person_titles(driver, updates: List[Dict[str, Any]]):
     """Batch update job title properties.
 
-    Each tuple: (person_id, jobTitle, jobTitleCanon, jobTitleCanonShort, jobTitleSnake)
+    Each dict in ``updates`` must contain the following keys:
+        id: Person.id
+        title: jobTitle
+        canon: jobTitleCanon
+        short: jobTitleCanonShort
+        snake: jobTitleSnake
+        jobTokens: List[str] of raw job title tokens
+        canonTokens: List[str] of canonical job title tokens
+
+    The query only sets these properties, leaving others untouched. Running this
+    in a single transaction via ``UNWIND`` greatly improves performance.
     """
     query = (
         "UNWIND $rows AS row "
@@ -286,35 +328,41 @@ def update_person_titles(driver, updates: List[Tuple[str, str, str, str, str]]):
         "SET p.jobTitle = row.title, "
         "    p.jobTitleCanon = row.canon, "
         "    p.jobTitleCanonShort = row.short, "
-        "    p.jobTitleSnake = row.snake "
+        "    p.jobTitleSnake = row.snake, "
+        "    p.jobTitleTokens = row.jobTokens, "
+        "    p.jobTitleCanonTokens = row.canonTokens "
         "RETURN count(p) AS updated"
     )
-    rows = [
-        {
-            "id": pid,
-            "title": title,
-            "canon": canon,
-            "short": short,
-            "snake": snake,
-        }
-        for (pid, title, canon, short, snake) in updates
-    ]
     with driver.session() as session:
-        res = session.run(query, rows=rows)
-        count = res.single()["updated"]
-    return count
+        res = session.run(query, rows=updates)
+        return res.single()["updated"]
 
 
 def main():
     people = load_people()
     today = datetime.utcnow()
-    updates: List[Tuple[str, str, str, str, str]] = []
+    updates: List[Dict[str, Any]] = []
     for rec in people:
         pid = rec.get("person_id") or rec.get("id")
         if not pid:
             continue
         job_title, canon, short, snake = derive_job_title(rec, today)
-        updates.append((pid, job_title, canon, short, snake))
+        # Tokenize both the raw job title and the canonical category. Replace slashes
+        # with spaces before tokenizing canonical categories so cross-category
+        # separators become separate tokens.
+        raw_tokens = tokenize_title(job_title)
+        canon_tokens = tokenize_title(canon)
+        updates.append(
+            {
+                "id": pid,
+                "title": job_title,
+                "canon": canon,
+                "short": short,
+                "snake": snake,
+                "jobTokens": raw_tokens,
+                "canonTokens": canon_tokens,
+            }
+        )
 
     driver = get_driver()
     updated = update_person_titles(driver, updates)
