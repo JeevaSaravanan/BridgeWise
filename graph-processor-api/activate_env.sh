@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Activate the virtual environment
 if [ -d ".venv" ]; then
     source .venv/bin/activate
     echo "Virtual environment activated."
@@ -16,15 +16,5 @@ else
     echo "Virtual environment created and activated."
 fi
 
-# Install required packages directly to ensure they're available
+# Make sure all required packages are installed
 pip install neo4j python-dotenv fastapi "uvicorn[standard]" pydantic langchain-openai pinecone python-dateutil requests
-
-# Source environment if present
-if [[ -f .env ]]; then
-	export $(grep -v '^#' .env | xargs -I {} echo {}) 2>/dev/null || true
-elif [[ -f .env.example ]]; then
-	export $(grep -v '^#' .env.example | xargs -I {} echo {}) 2>/dev/null || true
-fi
-
-# Now run the application
-uvicorn app:app --host 0.0.0.0 --port 4000 --reload "$@"

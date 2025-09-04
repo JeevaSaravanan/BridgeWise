@@ -75,6 +75,7 @@ Notes
 """
 from __future__ import annotations
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import os
@@ -85,6 +86,15 @@ from langchain_openai import AzureOpenAIEmbeddings, OpenAIEmbeddings
 from pinecone import Pinecone
 
 app = FastAPI(title="Graph Processor API")
+
+# Add CORS middleware to allow cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # --- helpers ---
 
@@ -124,12 +134,26 @@ class RecomputeRequest(BaseModel):
 @app.get('/health')
 def health(): return {'status':'ok'}
 
-@app.get('/clusters')
-def clusters():
+@app.get('/connections')
+def connections():
     drv = get_driver()
     with drv.session() as s:
         rows = s.run("MATCH (p:Person) RETURN p.community AS comm, count(*) AS size ORDER BY size DESC")
         return [{"community": r['comm'], "size": r['size']} for r in rows]
+
+@app.get('/clusters')
+def clusters():
+    """Return job titles and their counts, ordered by count in descending order."""
+    drv = get_driver()
+    with drv.session() as s:
+        rows = s.run(
+            """
+            MATCH (p:Person)
+            RETURN p.jobTitleCanon AS jobTitle, COUNT(*) AS totalCount
+            ORDER BY totalCount DESC
+            """
+        )
+        return [{"jobTitle": r['jobTitle'], "totalCount": r['totalCount']} for r in rows]
 
 @app.get('/clusters/summary')
 def cluster_summary(top_n: int = 5):
@@ -305,13 +329,11 @@ def rank_connections(req: RankConnectionsRequest):
         me_id=req.me_id,
         query_text=req.query,
         top_k=req.top_k,
-        weights=(req.w_vec, req.w_skill, req.w_job, req.w_struct_global, req.w_struct_ego),
         embed=_embed_once,
         pinecone_top_k=req.pinecone_top_k,
-        prefilter=req.prefilter,
-        rescale_top=req.rescale_top,
     )
     out = {'results': [p.__dict__ for p in people]}
+    print("out:", out)
     if req.debug:
         # replicate some internal steps for transparency
         all_skills = _rmc_fetch_all_skills(drv)

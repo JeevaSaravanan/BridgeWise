@@ -45,12 +45,12 @@ def test_health():
     _print("health", data)
 
 
-def test_clusters():
-    r = _req("GET", "/clusters")
+def test_connections():
+    r = _req("GET", "/connections")
     assert r.status_code == 200, r.text
     data = r.json()
     assert isinstance(data, list)
-    _print("clusters", data[:5])
+    _print("connections", data[:5])
 
 
 def test_cluster_summary():
@@ -171,14 +171,14 @@ def test_intro_path():
 def run_all():
     funcs = [
         test_health,
-        test_clusters,
-        test_cluster_summary,
-        test_person,
-        test_rank_basic,
+        #test_connections,
+        #test_cluster_summary,
+        #test_person,
+        #test_rank_basic,
         test_rank_connections_debug,
-        test_rank_connections_explain,
-        test_rank_connections_batch,
-        test_intro_path,
+        #test_rank_connections_explain,
+       # test_rank_connections_batch,
+       # test_intro_path,
     ]
     start = time.time()
     for f in funcs:

@@ -7,6 +7,8 @@ import { PortfolioBuilderModal } from "./PortfolioBuilderModal";
 import { PortfolioDetailModal } from "./PortfolioDetailModal";
 import { OutreachComposerModal } from "./OutreachComposerModal";
 import { portfolioStorage, PortfolioItem } from "@/lib/portfolioStorage";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 import { 
   Network, 
   FileText, 
@@ -168,6 +170,45 @@ export const Dashboard = () => {
       </header>
 
       <div className="container mx-auto px-6 py-8">
+
+              {/* Quick Actions */}
+        <Card className="mb-8 shadow-card border-border bg-gradient-to-r from-background via-background to-secondary/10">
+      <CardContent className="p-6">
+        <div className="flex items-center gap-6">
+          <Avatar className="w-16 h-16 border-2 border-primary/20">
+            <AvatarImage src="/placeholder.svg" alt="Profile" />
+            <AvatarFallback className="text-lg font-semibold bg-gradient-primary text-white">
+              JD
+            </AvatarFallback>
+          </Avatar>
+          
+          <div className="flex-1 space-y-3">
+            <div>
+              <h2 className="text-xl font-bold text-foreground">John Doe</h2>
+              <p className="text-muted-foreground">Senior Product Manager</p>
+            </div>
+            
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              Passionate about building user-centric products that solve real problems. 
+              5+ years experience in product management, specializing in B2B SaaS and mobile apps.
+            </p>
+            
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">Product Management</Badge>
+              <Badge variant="secondary">React</Badge>
+              <Badge variant="secondary">Data Analysis</Badge>
+              <Badge variant="secondary">User Research</Badge>
+              <Badge variant="secondary">Agile</Badge>
+              <Badge variant="secondary">SQL</Badge>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+
+
+        <div className="my-8 border-t border-border"></div>
+
         {/* Main modules grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           {/* Connection Insights */}
@@ -491,51 +532,7 @@ export const Dashboard = () => {
           </Card>
         )}
 
-        {/* Quick Actions */}
-        <Card className="shadow-card border-border">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common workflows to get you started</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Button 
-                variant="outline" 
-                className="h-20 flex-col"
-                onClick={() => setNetworkModalOpen(true)}
-              >
-                <Users className="w-6 h-6 mb-2" />
-                <span>Find Warm Intro</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-20 flex-col"
-                onClick={() => setPortfolioModalOpen(true)}
-              >
-                <FileText className="w-6 h-6 mb-2" />
-                <span>Upload Portfolio</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-20 flex-col"
-                onClick={() => setOutreachModalOpen(true)}
-              >
-                <MessageSquare className="w-6 h-6 mb-2" />
-                <span>Draft Outreach</span>
-              </Button>
-              <Button 
-                variant="professional" 
-                className="h-20 flex-col"
-                onClick={() => {
-                  setNetworkModalOpen(true);
-                }}
-              >
-                <ArrowRight className="w-6 h-6 mb-2" />
-                <span>Full Workflow</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+  
       </div>
       
       {/* Modals */}

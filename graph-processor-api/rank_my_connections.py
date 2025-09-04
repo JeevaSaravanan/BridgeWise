@@ -34,6 +34,9 @@ class RankedPerson:
     title: str
     score: float
     components: Dict[str, float]
+    company: str = ""
+    description: str = ""
+    school: str = ""
 
 
 _CACHE_SKILLS: List[str] | None = None
@@ -192,6 +195,9 @@ def rank_my_connections(
                     "struct_ego": struct_ego.get(pid, 0.0),
                     "company_match": company_match.get(pid, 0.0),
                 },
+                company=f.company,
+                description=f.description,
+                school=f.school,
             )
         )
     # Optional: rescale so the maximum score is ~rescale_top (default 0.8) while preserving ordering
@@ -585,6 +591,10 @@ class _PersonFeatures:
     bp_job: float
     name: str
     title: str
+    company: str
+    description: str
+    id: str
+    school: str
 
 
 def _fetch_candidate_features(driver: Neo4jDriver, cand_ids: List[str]) -> Dict[str, _PersonFeatures]:
@@ -598,7 +608,10 @@ def _fetch_candidate_features(driver: Neo4jDriver, cand_ids: List[str]) -> Dict[
            coalesce(p.bridgePotentialSkills, 0.0) AS bpSkills,
            coalesce(p.bridgePotentialJob, 0.0) AS bpJob,
            coalesce(p.name, p.id) AS name,
-           coalesce(p.jobTitleCanon, p.jobTitle, "") AS title
+           coalesce(p.jobTitleCanon, p.jobTitle, "") AS title,
+           coalesce(p.company, "") AS company,
+           coalesce(p.description, "") AS description,
+           coalesce(p.school, "") AS school
     """
     with driver.session() as s:
         rows = list(s.run(q, cand=cand_ids))
@@ -614,6 +627,10 @@ def _fetch_candidate_features(driver: Neo4jDriver, cand_ids: List[str]) -> Dict[
             bp_job=float(r.get("bpJob", 0.0) or 0.0),
             name=str(r["name"] or pid),
             title=str(r["title"] or ""),
+            company=str(r.get("company", "") or ""),
+            description=str(r.get("description", "") or ""),
+            id=pid,
+            school=str(r.get("school", "") or "")
         )
     return out
 

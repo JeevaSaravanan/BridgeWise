@@ -87,7 +87,7 @@ results = rank_my_connections(
     neo4j_driver=driver,
     pinecone_index=index,
     me_id=ME_ID,
-    query_text="I want to know who in my connections are software engineers and work in company Google",
+    query_text="Data Scientist",
     top_k=10,
     embed=embed_fn
 )
