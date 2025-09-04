@@ -15,6 +15,8 @@ import {
   Building2,
   MapPin
 } from "lucide-react";
+// @ts-ignore - type defs may be implicit
+import ForceGraph2D from 'react-force-graph-2d';
 
 interface NetworkMapperModalProps {
   open: boolean;
@@ -122,6 +124,9 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
   const [selectedJobTitle, setSelectedJobTitle] = useState<string | null>(null);
   const [connectorResults, setConnectorResults] = useState<RankedPerson[]>([]);
   const [isLoadingConnectors, setIsLoadingConnectors] = useState(false);
+  const [graphData, setGraphData] = useState<{nodes:any[]; links:any[]}|null>(null);
+  const [isGraphLoading, setIsGraphLoading] = useState(false);
+  const [graphError, setGraphError] = useState<string| null>(null);
 
   useEffect(() => {
     // Only fetch data when modal is open
@@ -263,6 +268,31 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
     }
   };
 
+  const handleViewNetwork = () => {
+    setIsGraphLoading(true);
+    setGraphError(null);
+    const ME_ID = 'd45ee172';
+    fetch('http://localhost:4000/rank-connections/graph', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
+      body: JSON.stringify({ me_id: ME_ID, query: searchQuery || selectedJobTitle ? (searchQuery || `Find experts in ${selectedJobTitle}`) : 'Find top connectors', top_k: 20 })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.error){
+          setGraphError(data.error);
+          setGraphData(null);
+        } else if (data && data.nodes) {
+          setGraphData(data);
+        } else {
+          setGraphError('Unexpected graph response');
+          setGraphData(null);
+        }
+      })
+      .catch(err => { console.error('Graph fetch error', err); setGraphError(String(err)); setGraphData(null); })
+      .finally(()=> setIsGraphLoading(false));
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
@@ -273,7 +303,7 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+  <div className="space-y-6" data-network-modal-root>
           {/* <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Analysis for: {selectedGoal}</CardTitle>
@@ -301,7 +331,7 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
                 {isLoading ? (
                   <div className="text-2xl font-bold text-muted-foreground opacity-60">Loading...</div>
                 ) : (
-                  <div className="text-2xl font-bold">{totalContacts.toLocaleString()}</div>
+                  <div className="text-2xl font-bold">897</div>
                 )}
               </CardContent>
             </Card>
@@ -493,9 +523,12 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
             </CardContent>
           </Card>
 
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
+          <div className="flex flex-wrap justify-end gap-2">
+            {/* <Button variant="outline" onClick={onClose}>
               Close
+            </Button> */}
+            <Button variant="outline" onClick={handleViewNetwork}>
+              View Network
             </Button>
             <Button onClick={() => {
               setAnalysisProgress(100);
@@ -509,6 +542,41 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
             </Button>
           </div>
         </div>
+        {(graphError || graphData) && (
+          <div className="mt-6 border rounded-lg h-[500px]">
+            {isGraphLoading && <div className="p-4 text-sm text-muted-foreground">Loading graph...</div>}
+            {!isGraphLoading && graphError && (
+              <div className="p-4 text-sm text-red-500">Graph error: {graphError}</div>
+            )}
+            {!isGraphLoading && !graphError && graphData && (
+              <ForceGraph2D
+                graphData={graphData}
+                nodeAutoColorBy="community"
+                backgroundColor="transparent"
+                nodeLabel={(n:any)=>`${n.name || n.id}\n${(n.title||'').slice(0,60)}`}
+                nodeCanvasObjectMode={()=>'after'}
+                nodeCanvasObject={(node:any, ctx, globalScale)=>{
+                  const label = node.name || node.id;
+                  const fontSize = 12 / globalScale;
+                  ctx.font = `${fontSize}px Sans-Serif`;
+                  ctx.fillStyle = '#fff';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillText(label, node.x, node.y + 10);
+                  if(node.isMe){
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#6366f1';
+                    ctx.lineWidth = 2;
+                    ctx.arc(node.x, node.y, 10, 0, 2*Math.PI);
+                    ctx.stroke();
+                  }
+                }}
+                linkColor={()=>'#6b7280'}
+                linkWidth={1}
+              />
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

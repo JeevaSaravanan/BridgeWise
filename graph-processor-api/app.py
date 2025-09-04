@@ -75,6 +75,7 @@ Notes
 """
 from __future__ import annotations
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any
@@ -392,6 +393,99 @@ def rank_connections_batch(req: RankConnectionsBatchRequest):
         )
         out.append({'query': q, 'results': [p.__dict__ for p in people]})
     return {'results': out}
+
+@app.post('/rank-connections/graph')
+def rank_connections_graph(req: RankConnectionsRequest):
+    """Return graph (nodes + links) for the ranked connections subgraph.
+
+    On error returns {error: str}. Nodes: me + top_k ranked people. Links: existing KNOWS edges.
+    """
+    try:
+        embedder = get_embedder(); pc, idx = get_pinecone(); index = pc.Index(idx)
+
+        def _embed_once(text: str):
+            try:
+                return embedder.embed_query(text)
+            except Exception:
+                return embedder.embed_documents([text])[0]
+
+        drv = get_driver()
+        try:
+            ranked = rank_my_connections(
+                neo4j_driver=drv,
+                pinecone_index=index,
+                me_id=req.me_id,
+                query_text=req.query,
+                top_k=req.top_k,
+                pinecone_top_k=req.pinecone_top_k,
+                embed=_embed_once,
+            )
+        except Exception as embed_err:
+            # Fallback: return simple first-degree ego network (limited) with error note
+            with drv.session() as s:
+                ego_rows = s.run(
+                    """
+                    MATCH (me:Person {id:$me})-[:KNOWS]-(p:Person)
+                    RETURN me.id AS me_id, collect(p.id)[0..50] AS nbrs
+                    """,
+                    me=req.me_id
+                ).single()
+                nbr_ids = ego_rows['nbrs'] if ego_rows else []
+                keep_ids = {req.me_id} | set(nbr_ids)
+                nodes = []
+                info_rows = s.run(
+                    """
+                    UNWIND $ids AS pid
+                    MATCH (p:Person {id:pid})
+                    RETURN p.id AS id, p.name AS name, p.title AS title, p.company AS company, coalesce(p.bridgePotential,0) AS bridgePotential
+                    """,
+                    ids=list(keep_ids)
+                )
+                for r in info_rows:
+                    d = dict(r); d['isMe'] = (d['id']==req.me_id); d['score'] = 1.0 if d['isMe'] else 0.0; nodes.append(d)
+                link_rows = s.run(
+                    """
+                    UNWIND $ids AS a
+                    UNWIND $ids AS b
+                    WITH a,b WHERE a < b
+                    MATCH (p1:Person {id:a})-[:KNOWS]-(p2:Person {id:b})
+                    RETURN p1.id AS source, p2.id AS target
+                    """,
+                    ids=list(keep_ids)
+                )
+                links = [dict(x) for x in link_rows]
+            return {'nodes': nodes, 'links': links, 'fallback': True, 'error': f"embed_fail: {embed_err}"}
+        keep_ids = {req.me_id} | {p.id for p in ranked}
+        nodes = []
+        with drv.session() as s:
+            rows = s.run(
+                """
+                UNWIND $ids AS pid
+                MATCH (p:Person {id: pid})
+                RETURN p.id AS id, p.name AS name, p.title AS title, p.company AS company, coalesce(p.bridgePotential,0) AS bridgePotential
+                """,
+                ids=list(keep_ids)
+            )
+            for r in rows:
+                nodes.append(dict(r))
+            edge_rows = s.run(
+                """
+                UNWIND $ids AS a
+                UNWIND $ids AS b
+                WITH a,b WHERE a < b
+                MATCH (p1:Person {id:a})-[:KNOWS]-(p2:Person {id:b})
+                RETURN p1.id AS source, p2.id AS target
+                """,
+                ids=list(keep_ids)
+            )
+            links = [dict(er) for er in edge_rows]
+        score_map = {p.id: p.score for p in ranked}
+        for n in nodes:
+            n['score'] = score_map.get(n['id'], 1.0 if n['id']==req.me_id else 0.0)
+            n['isMe'] = (n['id'] == req.me_id)
+        return { 'nodes': nodes, 'links': links }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': str(e)})
 
 @app.get('/intro-path')
 def intro_path(src: str, dst: str, max_depth: int = 4):

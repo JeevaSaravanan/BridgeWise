@@ -9,12 +9,12 @@ import { OutreachComposerModal } from "./OutreachComposerModal";
 import { portfolioStorage, PortfolioItem } from "@/lib/portfolioStorage";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-import { 
-  Network, 
-  FileText, 
-  MessageSquare, 
-  Plus, 
-  Users, 
+import {
+  Network,
+  FileText,
+  MessageSquare,
+  Plus,
+  Users,
   TrendingUp,
   ArrowRight,
   Github,
@@ -30,7 +30,7 @@ import {
 const getTimeAgo = (date: Date): string => {
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
+
   if (diffInSeconds < 60) return 'Just now';
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
@@ -47,10 +47,13 @@ export const Dashboard = () => {
   const [selectedConnector, setSelectedConnector] = useState(null);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [portfolioStats, setPortfolioStats] = useState({ totalItems: 0, skillCount: 0, typeBreakdown: {}, uniqueSkills: [] });
-  
+  // Sidebar UI states
+  const [aboutExpanded, setAboutExpanded] = useState(false);
+  const [showAllSkills, setShowAllSkills] = useState(false);
+
   // Safe getter for portfolio items length
   const portfolioItemsLength = portfolioItems?.length || 0;
-  
+
   // Load portfolio items on component mount
   useEffect(() => {
     loadPortfolioItems();
@@ -62,14 +65,14 @@ export const Dashboard = () => {
       await portfolioStorage.init();
       const portfolio = await portfolioStorage.getPortfolioAsync(); // Use async method
       const stats = await portfolioStorage.getStats();
-      
+
       // Ensure items are sorted by creation date (newest first)
       const sortedPortfolio = portfolio.sort((a, b) => {
         const dateA = new Date(a.createdAt).getTime();
         const dateB = new Date(b.createdAt).getTime();
         return dateB - dateA; // Newest first
       });
-      
+
       setPortfolioItems(sortedPortfolio);
       setPortfolioStats(stats);
       console.log('Loaded portfolio items:', sortedPortfolio);
@@ -78,30 +81,30 @@ export const Dashboard = () => {
       // Fallback to default data
       const portfolio = portfolioStorage.getPortfolio();
       const stats = await portfolioStorage.getStats();
-      
+
       // Ensure fallback items are also sorted
       const sortedPortfolio = portfolio.sort((a, b) => {
         const dateA = new Date(a.createdAt).getTime();
         const dateB = new Date(b.createdAt).getTime();
         return dateB - dateA; // Newest first
       });
-      
+
       setPortfolioItems(sortedPortfolio); // portfolio is already an array
       setPortfolioStats(stats);
     }
   };
-  
+
   const handleSelectConnector = (connector: any) => {
     setSelectedConnector(connector);
     setOutreachModalOpen(true);
   };
-  
+
   const handlePortfolioCreated = async (portfolio: any) => {
     try {
       // Add to storage
       const newItem = await portfolioStorage.addPortfolioItem(portfolio);
       console.log('Portfolio item created:', newItem);
-      
+
       // Reload portfolio items to reflect changes
       await loadPortfolioItems();
     } catch (error) {
@@ -169,48 +172,149 @@ export const Dashboard = () => {
         </div>
       </header>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8">
+        {/* Sidebar */}
+        <aside className="w-full lg:w-72 xl:w-80 flex-shrink-0 space-y-4">
+          {/* Profile Card */}
+          <Card className="shadow-card border-border overflow-hidden sticky top-6">
+            {/* Cover */}
+            <div className="h-16 bg-gradient-to-r from-primary/70 via-primary to-primary-glow" />
+            <CardContent className="pt-0 px-4 pb-5">
+              {/* Avatar overlapping cover */}
+              <div className="-mt-10 flex justify-center">
+                <Avatar className="w-24 h-24 ring-4 ring-background border border-border bg-background">
+                  <AvatarImage src="/placeholder.svg" alt="Profile" />
+                  <AvatarFallback className="text-xl font-semibold bg-gradient-primary text-white">JS</AvatarFallback>
+                </Avatar>
+              </div>
+              {/* Name & headline */}
+              <div className="mt-4 text-center space-y-1">
+                <h2 className="text-base font-bold text-foreground leading-tight">Jeeva Saravana Bhavanandam</h2>
+                <p className="text-[11px] text-muted-foreground leading-snug mx-auto max-w-[14rem]">
+                  Software Development Engineer · Hackathon Winner · Product Builder
+                </p>
+              </div>
+              {/* Stats */}
+              <div className="mt-4 grid grid-cols-3 text-center gap-2">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-semibold">897</div>
+                  <div className="text-[10px] text-muted-foreground">Connections</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-sm font-semibold">30</div>
+                  <div className="text-[10px] text-muted-foreground">Clusters</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-sm font-semibold">{portfolioStats.totalItems}</div>
+                  <div className="text-[10px] text-muted-foreground">Portfolio</div>
+                </div>
+              </div>
+              {/* Actions */}
+              {/* <div className="mt-4 flex flex-col gap-2">
+                <Button size="sm" className="h-8 text-xs" variant="outline" onClick={() => setPortfolioModalOpen(true)}>
+                  <Plus className="w-3 h-3 mr-1" /> Add Item
+                </Button>
+                <Button size="sm" className="h-8 text-xs" variant="outline" onClick={() => setNetworkModalOpen(true)}>
+                  <Network className="w-3 h-3 mr-1" /> Network
+                </Button>
+                <Button size="sm" className="h-8 text-xs" variant="outline" onClick={() => setOutreachModalOpen(true)}>
+                  <MessageSquare className="w-3 h-3 mr-1" /> Outreach
+                </Button>
+              </div> */}
+              {/* About */}
+              <div className="mt-5 border-t border-border/70 pt-4">
+                <div className="text-xs font-semibold mb-2 text-foreground">About</div>
+                <p className={`text-[11px] text-muted-foreground leading-relaxed ${aboutExpanded ? '' : 'line-clamp-4'}`}>
+                  Innovative product builder with a track record of translating data science and AI into scalable, user-centric outcomes. Passionate about shipping meaningful features, optimizing systems, and creating leverage for teams through thoughtful architecture and tooling.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAboutExpanded(!aboutExpanded)}
+                  className="mt-1 text-[11px] text-primary hover:underline"
+                >
+                  Show {aboutExpanded ? 'less' : 'more'}
+                </button>
+              </div>
+              {/* Skills */}
+              <div className="mt-5 border-t border-border/70 pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-foreground">Skills</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllSkills(!showAllSkills)}
+                    className="text-[10px] text-primary hover:underline"
+                  >
+                    {showAllSkills ? 'View less' : 'View all'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Product Management',
+                    'Software Development',
+                    'Data Analysis',
+                    'User Research',
+                    'AI/ML',
+                    'SQL',
+                    'System Design',
+                    'APIs',
+                    'Edge AI',
+                    'LLMs'
+                  ]
+                    .slice(0, showAllSkills ? undefined : 6)
+                    .map((skill) => (
+                      <Badge key={skill} variant="secondary" className="text-[10px] px-2 py-0.5">
+                        {skill}
+                      </Badge>
+                    ))}
+                </div>
+              </div>
+              {/* Recent Portfolio (compact) */}
+              <div className="mt-5 border-t border-border/70 pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-foreground">Recent Portfolio</span>
+                  {portfolioItemsLength > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.querySelector('#portfolio-highlights');
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="text-[10px] text-primary hover:underline"
+                    >
+                      View all
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {portfolioItemsLength === 0 ? (
+                    <div className="text-[11px] text-muted-foreground">No items yet.</div>
+                  ) : (
+                    (portfolioItems || []).slice(0, 5).map((item) => {
+                      const IconComponent = getTypeIcon(item.type);
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => handleViewPortfolioDetails(item)}
+                          className="w-full text-left flex items-center gap-2 group"
+                        >
+                          <IconComponent className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
+                          <span className="text-[11px] truncate flex-1 group-hover:underline">
+                            {item.title}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
 
-              {/* Quick Actions */}
-        <Card className="mb-8 shadow-card border-border bg-gradient-to-r from-background via-background to-secondary/10">
-      <CardContent className="p-6">
-        <div className="flex items-center gap-6">
-          <Avatar className="w-16 h-16 border-2 border-primary/20">
-            <AvatarImage src="/placeholder.svg" alt="Profile" />
-            <AvatarFallback className="text-lg font-semibold bg-gradient-primary text-white">
-              JD
-            </AvatarFallback>
-          </Avatar>
-          
-          <div className="flex-1 space-y-3">
-            <div>
-              <h2 className="text-xl font-bold text-foreground">John Doe</h2>
-              <p className="text-muted-foreground">Senior Product Manager</p>
-            </div>
-            
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              Passionate about building user-centric products that solve real problems. 
-              5+ years experience in product management, specializing in B2B SaaS and mobile apps.
-            </p>
-            
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">Product Management</Badge>
-              <Badge variant="secondary">React</Badge>
-              <Badge variant="secondary">Data Analysis</Badge>
-              <Badge variant="secondary">User Research</Badge>
-              <Badge variant="secondary">Agile</Badge>
-              <Badge variant="secondary">SQL</Badge>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-
-
-        <div className="my-8 border-t border-border"></div>
-
-        {/* Main modules grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        {/* Main Content */}
+        <main className="flex-1 min-w-0">
+          {/* Main modules grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           {/* Connection Insights */}
           <Card className="shadow-card border-border hover:shadow-glow transition-all duration-300">
             <CardHeader>
@@ -219,19 +323,19 @@ export const Dashboard = () => {
                   <Network className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Connection Insights</CardTitle>
-                  <CardDescription>Find your best connectors</CardDescription>
+                  <CardTitle>Smart Connections</CardTitle>
+                  <CardDescription>See your strongest connectors</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Connections</span>
-                <Badge variant="secondary">1,247</Badge>
+                <Badge variant="secondary">897</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Active Clusters</span>
-                <Badge variant="secondary">8</Badge>
+                <Badge variant="secondary">30</Badge>
               </div>
               <div className="space-y-2">
                 <div className="text-xs text-muted-foreground">Recent Analysis</div>
@@ -246,13 +350,13 @@ export const Dashboard = () => {
                   </div>
                 </div>
               </div>
-              <Button 
-                className="w-full" 
+              <Button
+                className="w-full"
                 variant="outline"
                 onClick={() => setNetworkModalOpen(true)}
               >
                 <TrendingUp className="w-4 h-4" />
-                Analyze Network
+                Explore Network
               </Button>
             </CardContent>
           </Card>
@@ -265,8 +369,8 @@ export const Dashboard = () => {
                   <FileText className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Showcase Library</CardTitle>
-                  <CardDescription>Create porfolio cards</CardDescription>
+                  <CardTitle>Portfolio Builder</CardTitle>
+                  <CardDescription>Showcase your work as portfolio cards</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -275,19 +379,18 @@ export const Dashboard = () => {
                 <span className="text-sm text-muted-foreground">Portfolio Cards</span>
                 <Badge variant="secondary">{portfolioStats.totalItems}</Badge>
               </div>
-              
+
               {/* Portfolio Management Actions */}
               <div className="flex gap-2 mb-4">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleDownloadPortfolio}
-                  className="flex-1"
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => setPortfolioModalOpen(true)}
                 >
-                  <Download className="w-3 h-3 mr-1" />
-                  Export
+                  <Plus className="w-4 h-4" />
+                  Add Portfolio Item
                 </Button>
-                <div className="flex-1">
+                {/* <div className="flex-1">
                   <label htmlFor="portfolio-import" className="w-full">
                     <Button 
                       variant="outline" 
@@ -306,13 +409,13 @@ export const Dashboard = () => {
                     onChange={handleImportPortfolio}
                     className="hidden"
                   />
-                </div>
+                </div> */}
               </div>
-              
+
               {/* Add Reset to Sample Data button for testing */}
               {portfolioItemsLength === 0 && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => {
                     loadPortfolioItems(); // Refresh to load PostgreSQL data
@@ -360,14 +463,16 @@ export const Dashboard = () => {
                   )}
                 </div>
               </div>
-              <Button 
-                className="w-full" 
+              <Button
                 variant="outline"
-                onClick={() => setPortfolioModalOpen(true)}
+                size="sm"
+                onClick={handleDownloadPortfolio}
+                className="w-full mt-2"
               >
-                <Plus className="w-4 h-4" />
-                Add Portfolio Item
+                <Download className="w-4 h-4 mr-1" />
+                Export
               </Button>
+
             </CardContent>
           </Card>
 
@@ -380,7 +485,7 @@ export const Dashboard = () => {
                 </div>
                 <div>
                   <CardTitle>Outreach Composer</CardTitle>
-                  <CardDescription>AI-powered messages</CardDescription>
+                  <CardDescription>Smart outreach</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -389,10 +494,10 @@ export const Dashboard = () => {
                 <span className="text-sm text-muted-foreground">Active Campaigns</span>
                 <Badge variant="secondary">3</Badge>
               </div>
-              <div className="flex items-center justify-between">
+              {/* <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Success Rate</span>
                 <Badge className="bg-green-100 text-green-800">67%</Badge>
-              </div>
+              </div> */}
               <div className="space-y-2">
                 <div className="text-xs text-muted-foreground">Recent Outreach</div>
                 <div className="space-y-1">
@@ -406,13 +511,13 @@ export const Dashboard = () => {
                   </div>
                 </div>
               </div>
-              <Button 
-                className="w-full" 
+              <Button
+                className="w-full"
                 variant="outline"
                 onClick={() => setOutreachModalOpen(true)}
               >
                 <MessageSquare className="w-4 h-4" />
-                Compose Message
+                Start Message
               </Button>
             </CardContent>
           </Card>
@@ -424,8 +529,8 @@ export const Dashboard = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Portfolio Items</CardTitle>
-                  <CardDescription>Your created portfolio cards</CardDescription>
+                  <CardTitle>Highlights</CardTitle>
+                  <CardDescription>Your saved portfolio cards</CardDescription>
                 </div>
                 <Badge variant="outline">{portfolioItemsLength} items</Badge>
               </div>
@@ -440,19 +545,19 @@ export const Dashboard = () => {
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
                             <IconComponent className="w-4 h-4 text-muted-foreground" />
-                            
-                              <a 
-                                href={item.url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                title={`Open ${item.type} resource`}
-                              >
-                                <Badge variant="outline" className="text-xs flex items-center gap-1 hover:bg-secondary cursor-pointer">
-                                  {item.type}
-                                  <LinkIcon className="w-3 h-3 ml-1" />
-                                </Badge>
-                              </a>
-                         
+
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Open ${item.type} resource`}
+                            >
+                              <Badge variant="secondary" className="text-xs flex items-center gap-1 cursor-pointer">
+                                {item.type}
+                                <LinkIcon className="w-3 h-3 ml-1" />
+                              </Badge>
+                            </a>
+
                           </div>
                           <Button
                             variant="ghost"
@@ -471,7 +576,7 @@ export const Dashboard = () => {
                         <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
                           {item.summary}
                         </p>
-                        
+
                         {/* {item.url && (
                           <div className="mb-3">
                             <a 
@@ -485,14 +590,14 @@ export const Dashboard = () => {
                             </a>
                           </div>
                         )} */}
-                        
+
                         <div className="flex flex-wrap gap-1 mb-3">
                           {(() => {
                             // Combine skills from main field and analysis result
                             const mainSkills = item.skills || [];
                             const extractedSkills = item.analysisResult?.extracted_skills || [];
                             const allSkills = [...new Set([...mainSkills, ...extractedSkills])]; // Deduplicate
-                            
+
                             return (
                               <>
                                 {allSkills.slice(0, 3).map((skill, index) => (
@@ -509,7 +614,7 @@ export const Dashboard = () => {
                             );
                           })()}
                         </div>
-                        
+
                         <div className="flex items-center justify-between">
                           <div className="text-xs text-muted-foreground">
                             {getTimeAgo(new Date(item.createdAt))}
@@ -532,33 +637,33 @@ export const Dashboard = () => {
           </Card>
         )}
 
-  
+        </main>
       </div>
-      
+
       {/* Modals */}
-      <NetworkMapperModal 
-        open={networkModalOpen} 
+      <NetworkMapperModal
+        open={networkModalOpen}
         onClose={() => setNetworkModalOpen(false)}
         onSelectConnector={handleSelectConnector}
       />
-      
-      <PortfolioBuilderModal 
-        open={portfolioModalOpen} 
+
+      <PortfolioBuilderModal
+        open={portfolioModalOpen}
         onClose={() => setPortfolioModalOpen(false)}
         onPortfolioCreated={handlePortfolioCreated}
       />
-      
-      <PortfolioDetailModal 
+
+      <PortfolioDetailModal
         item={selectedPortfolioItem}
-        open={portfolioDetailModalOpen} 
+        open={portfolioDetailModalOpen}
         onClose={() => {
           setPortfolioDetailModalOpen(false);
           setSelectedPortfolioItem(null);
         }}
       />
-      
-      <OutreachComposerModal 
-        open={outreachModalOpen} 
+
+      <OutreachComposerModal
+        open={outreachModalOpen}
         onClose={() => setOutreachModalOpen(false)}
         selectedConnector={selectedConnector}
         portfolioItems={portfolioItems}

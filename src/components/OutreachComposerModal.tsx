@@ -76,7 +76,7 @@ P.S. I'd be glad to return the favor and make introductions within my network as
 };
 
 export const OutreachComposerModal = ({ open, onClose, selectedConnector: initialConnector, portfolioItems = [] }: OutreachComposerModalProps) => {
-  const [goal, setGoal] = useState("a Product Manager role at a growing startup");
+  const [goal, setGoal] = useState("");
   const [attachedPortfolio, setAttachedPortfolio] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
