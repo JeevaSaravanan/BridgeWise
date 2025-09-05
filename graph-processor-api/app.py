@@ -437,7 +437,7 @@ def rank_connections_graph(req: RankConnectionsRequest):
                     """
                     UNWIND $ids AS pid
                     MATCH (p:Person {id:pid})
-                    RETURN p.id AS id, p.name AS name, p.title AS title, p.company AS company, coalesce(p.bridgePotential,0) AS bridgePotential
+                    RETURN p.id AS id, p.name AS name, p.title AS title, p.skills AS skills,p.company AS company, coalesce(p.bridgePotential,0) AS bridgePotential
                     """,
                     ids=list(keep_ids)
                 )
@@ -462,7 +462,7 @@ def rank_connections_graph(req: RankConnectionsRequest):
                 """
                 UNWIND $ids AS pid
                 MATCH (p:Person {id: pid})
-                RETURN p.id AS id, p.name AS name, p.title AS title, p.company AS company, coalesce(p.bridgePotential,0) AS bridgePotential
+                RETURN p.id AS id, p.name AS name, p.title AS title, p.company AS company, p.skills AS skills, coalesce(p.bridgePotential,0) AS bridgePotential
                 """,
                 ids=list(keep_ids)
             )

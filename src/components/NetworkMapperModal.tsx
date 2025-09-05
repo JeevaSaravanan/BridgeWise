@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle ,CardHeader } from "@/components/ui/card";
@@ -13,7 +13,11 @@ import {
   ArrowRight,
   Star,
   Building2,
-  MapPin
+  MapPin,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 // @ts-ignore - type defs may be implicit
 import ForceGraph2D from 'react-force-graph-2d';
@@ -127,6 +131,30 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
   const [graphData, setGraphData] = useState<{nodes:any[]; links:any[]}|null>(null);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState<string| null>(null);
+  const [graphContainerWidth, setGraphContainerWidth] = useState(800);
+  const graphContainerRef = useRef<HTMLDivElement>(null);
+  const [isGraphVisible, setIsGraphVisible] = useState(false);
+  const fgRef = useRef<any>(null);
+
+// when graph data is present, center + nudge zoom
+useEffect(() => {
+  if (!fgRef.current || !graphData) return;
+  
+  // Use setTimeout to allow the graph to stabilize first
+  const timer = setTimeout(() => {
+    // Zoom to fit all nodes
+    fgRef.current.zoomToFit(400, 40);
+    
+    // Apply a slight zoom in for better visibility
+    setTimeout(() => {
+      if (fgRef.current) {
+        fgRef.current.zoom(fgRef.current.zoom() * 1.1, 300);
+      }
+    }, 500);
+  }, 1000);
+  
+  return () => clearTimeout(timer);
+}, [graphData]);
 
   useEffect(() => {
     // Only fetch data when modal is open
@@ -135,7 +163,36 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
       fetchConnectionsData(); // To get total contacts count
     }
   }, [open]);
-
+  
+  // Effect to select the first non-null cluster by default once clusters are loaded
+  useEffect(() => {
+    if (clusters.length > 0 && selectedJobTitle === null) {
+      // Find the first cluster with a non-null jobTitle
+      const firstValidCluster = clusters.find(cluster => cluster.jobTitle !== null);
+      if (firstValidCluster) {
+        setSelectedJobTitle(firstValidCluster.jobTitle);
+      }
+    }
+  }, [clusters]);
+  
+  // Update graph container width when data is loaded or window resizes
+  useEffect(() => {
+    const updateGraphWidth = () => {
+      if (graphContainerRef.current) {
+        setGraphContainerWidth(graphContainerRef.current.clientWidth);
+      }
+    };
+    
+    // Initial measurement
+    updateGraphWidth();
+    
+    // Listen for resize events
+    window.addEventListener('resize', updateGraphWidth);
+    
+    // Clean up
+    return () => window.removeEventListener('resize', updateGraphWidth);
+  }, [graphData]); // Re-measure when graph data changes
+  
   const fetchClustersData = async () => {
     setIsLoading(true);
     try {
@@ -269,28 +326,73 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
   };
 
   const handleViewNetwork = () => {
+    // Toggle visibility first for responsive UI
+    setIsGraphVisible(prev => !prev);
+    
+    // If we're hiding the graph, do nothing else
+    if (isGraphVisible) {
+      return;
+    }
+    
+    // If we already have graph data, don't reload it
+    if (graphData && !isGraphLoading) {
+      return;
+    }
+    
+    // Clear previous data and show loading state
     setIsGraphLoading(true);
     setGraphError(null);
+    setGraphData(null); // Important: Clear previous data to show loading state
+    
     const ME_ID = 'd45ee172';
+    const query = searchQuery.trim() || (selectedJobTitle ? `Find experts in ${selectedJobTitle}` : 'Find top connectors');
+    
+    console.log("Fetching network graph for query:", query);
+    
     fetch('http://localhost:4000/rank-connections/graph', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
-      body: JSON.stringify({ me_id: ME_ID, query: searchQuery || selectedJobTitle ? (searchQuery || `Find experts in ${selectedJobTitle}`) : 'Find top connectors', top_k: 20 })
+      body: JSON.stringify({ 
+        me_id: ME_ID, 
+        query: query, 
+        top_k: 20 
+      })
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) {
+          throw new Error(`API responded with status: ${r.status}`);
+        }
+        return r.json();
+      })
       .then(data => {
-        if (data && data.error){
+        if (data && data.error) {
+          console.error("Graph API returned error:", data.error);
           setGraphError(data.error);
           setGraphData(null);
-        } else if (data && data.nodes) {
+        } else if (data && data.nodes && Array.isArray(data.nodes)) {
+          console.log("Graph data received:", data.nodes.length, "nodes");
+          // Check if any nodes have skills for debugging
+          const nodesWithSkills = data.nodes.filter(n => n.skills && Array.isArray(n.skills) && n.skills.length > 0);
+          if (nodesWithSkills.length > 0) {
+            console.log(`Found ${nodesWithSkills.length} nodes with skills. Example:`, nodesWithSkills[0]);
+          } else {
+            console.log("No nodes with skills found in the data");
+          }
           setGraphData(data);
         } else {
-          setGraphError('Unexpected graph response');
+          console.error("Unexpected graph response format:", data);
+          setGraphError('Unexpected graph response format');
           setGraphData(null);
         }
       })
-      .catch(err => { console.error('Graph fetch error', err); setGraphError(String(err)); setGraphData(null); })
-      .finally(()=> setIsGraphLoading(false));
+      .catch(err => { 
+        console.error('Graph fetch error:', err); 
+        setGraphError(String(err)); 
+        setGraphData(null); 
+      })
+      .finally(() => {
+        setIsGraphLoading(false);
+      });
   };
 
   return (
@@ -528,7 +630,18 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
               Close
             </Button> */}
             <Button variant="outline" onClick={handleViewNetwork}>
-              View Network
+              {isGraphVisible ? (
+                <>
+                  <EyeOff className="w-4 h-4 mr-2" />
+                  Hide Network
+                </>
+              ) : (
+                <>
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Network
+                </>
+                
+              )}
             </Button>
             <Button onClick={() => {
               setAnalysisProgress(100);
@@ -542,41 +655,153 @@ export const NetworkMapperModal = ({ open, onClose, onSelectConnector }: Network
             </Button>
           </div>
         </div>
-        {(graphError || graphData) && (
-          <div className="mt-6 border rounded-lg h-[500px]">
-            {isGraphLoading && <div className="p-4 text-sm text-muted-foreground">Loading graph...</div>}
-            {!isGraphLoading && graphError && (
+        {/* Graph container with animation */}
+        <div 
+          ref={graphContainerRef} 
+          className={`mt-6 border rounded-lg w-full overflow-hidden relative transition-all duration-300 ease-in-out ${
+            isGraphVisible ? 'h-[500px] opacity-100' : 'h-0 opacity-0 border-0'
+          }`}
+        >
+          {/* Show loading state */}
+          {isGraphLoading && 
+            <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+              <div className="p-4 text-sm text-muted-foreground flex flex-col items-center">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2"></div>
+                Loading graph...
+              </div>
+            </div>
+          }
+          
+          {/* Show error state */}
+          {!isGraphLoading && graphError && 
+            <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
               <div className="p-4 text-sm text-red-500">Graph error: {graphError}</div>
-            )}
-            {!isGraphLoading && !graphError && graphData && (
+            </div>
+          }
+          
+          {/* Render graph when data is available */}
+          {!isGraphLoading && !graphError && graphData && 
+            <div className="w-full h-full">
               <ForceGraph2D
                 graphData={graphData}
                 nodeAutoColorBy="community"
+                
                 backgroundColor="transparent"
-                nodeLabel={(n:any)=>`${n.name || n.id}\n${(n.title||'').slice(0,60)}`}
-                nodeCanvasObjectMode={()=>'after'}
-                nodeCanvasObject={(node:any, ctx, globalScale)=>{
-                  const label = node.name || node.id;
-                  const fontSize = 12 / globalScale;
-                  ctx.font = `${fontSize}px Sans-Serif`;
-                  ctx.fillStyle = '#fff';
-                  ctx.textAlign = 'center';
-                  ctx.textBaseline = 'middle';
-                  ctx.fillText(label, node.x, node.y + 10);
-                  if(node.isMe){
-                    ctx.beginPath();
-                    ctx.strokeStyle = '#6366f1';
-                    ctx.lineWidth = 2;
-                    ctx.arc(node.x, node.y, 10, 0, 2*Math.PI);
-                    ctx.stroke();
+                width={graphContainerWidth}
+                height={500}
+                ref={fgRef}
+                nodeRelSize={5}
+                cooldownTime={3000}
+                onNodeClick={(node) => {
+                  // Center view on node when clicked
+                  if (fgRef.current) {
+                    fgRef.current.centerAt(node.x, node.y, 1000);
+                    fgRef.current.zoom(fgRef.current.zoom() * 1.5, 500);
+                    
+                    // Log node data to console for debugging
+                    console.log("Node clicked:", node);
                   }
                 }}
-                linkColor={()=>'#6b7280'}
-                linkWidth={1}
+                nodeLabel={(n:any)=>{
+                  // Build a rich tooltip with available data
+                  let tooltip = `${n.name || n.id}\n${(n.title||'').slice(0,60)}`;
+                  
+                  // Add company if available
+                  if (n.company) {
+                    tooltip += `\nat ${n.company}`;
+                  }
+                  
+                  // Add skills if available
+                  if (n.skills && Array.isArray(n.skills) && n.skills.length > 0) {
+                    tooltip += '\n\nSkills:';
+                    // Limit to top 5 skills
+                    const topSkills = n.skills.slice(0, 5);
+                    topSkills.forEach(skill => {
+                      tooltip += `\n• ${skill}`;
+                    });
+                    
+                    // Indicate if there are more
+                    if (n.skills.length > 5) {
+                      tooltip += `\n  ...and ${n.skills.length - 5} more`;
+                    }
+                  }
+                  
+                  return tooltip;
+                }}
+                nodeCanvasObjectMode={() => 'after'}
+nodeCanvasObject={(node: any, ctx, globalScale) => {
+  // Get primary color for "me" node, or fallback
+  const primary = getComputedStyle(document.documentElement)
+    .getPropertyValue('--primary')
+    .trim();
+    const primaryAccent = getComputedStyle(document.documentElement)
+    .getPropertyValue('--primary-accent')
+    .trim();
+  const primaryColor = `hsl(${primary} / 0.3)`;
+
+  const primaryAccentColor = ` hsl(243 75% 59% /0.8)`;
+
+  const hasSkills = node.skills && Array.isArray(node.skills) && node.skills.length > 0;
+  const nodeRadius = node.isMe ? 8 : (hasSkills ? 6 : 5);
+
+  
+  // Draw node circle
+  ctx.beginPath();
+
+  //ctx.arc(node.x, node.y, nodeRadius, 0, 2 * Math.PI);
+  //ctx.fill();
+
+  // Outline for non-me nodes with #5048E5
+  if (!node.isMe) {
+    node.color =primaryColor;
+    ctx.fillStyle = `hsl(${primary} / 1)`
+    //ctx.lineWidth = 1.5;
+    //ctx.arc(node.x, node.y, nodeRadius - 2, 0, 2 * Math.PI);
+    //ctx.stroke();
+  }
+  else{
+    node.color =primaryAccentColor;
+      ctx.fillStyle = `hsl(${primaryAccent} / 1)`
+  }
+
+  // Labels
+  const label = node.name || node.id;
+  if (globalScale > 0.6 || node.isMe) {
+    const fontSize = Math.max(12 / globalScale, 1.5);
+    ctx.font = `${fontSize}px Sans-Serif`;
+
+    const textWidth = ctx.measureText(label).width;
+    const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.5);
+
+    ctx.fillStyle = 'rgba(245, 14, 14, 0)';
+    ctx.fillRect(
+      node.x - bckgDimensions[0] / 2,
+      node.y + nodeRadius + 2,
+      bckgDimensions[0],
+      bckgDimensions[1]
+    );
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#000';
+    ctx.fillText(label, node.x, node.y + nodeRadius + 2 + fontSize / 2);
+  }
+}}
+linkColor={() => 'rgba(107, 114, 128, 0.7)'}
+linkWidth={1}
               />
-            )}
-          </div>
-        )}
+            </div>
+          }
+          
+          {/* Empty state when no graph requested yet */}
+          {!isGraphLoading && !graphError && !graphData &&
+            <div className="absolute inset-0 flex items-center justify-center bg-background">
+              <div className="p-4 text-sm text-muted-foreground">
+                Click "View Network" to visualize your connections
+              </div>
+            </div>
+          }
+        </div>
       </DialogContent>
     </Dialog>
   );

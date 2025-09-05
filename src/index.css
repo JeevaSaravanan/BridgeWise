@@ -114,3 +114,21 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+
+.force-graph-container .float-tooltip-kap {
+
+  transform: translateY(-110%) !important; /* lift it above the cursor */
+  margin-top: -8px !important;   
+  
+  background: hsla(0, 0%, 0%, 0.75) !important; /* or any color */
+  color: #ffffff !important;
+  border: 1px solid hsla(240, 1%, 14%, 0.45) !important;
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18) !important;
+  font: 12px/1.35 Inter, system-ui, sans-serif !important;
+  white-space: pre-line;            /* shows \n from nodeLabel */
+  pointer-events: none;             /* don’t steal hover */
+  z-index: 99999;                    /* stay above canvas */
+}
